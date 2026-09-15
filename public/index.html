@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Onyx Discord Serverless Ticket Suite</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0e1015;
+      --card-bg: #161922;
+      --border: #262a38;
+      --accent: #5865f2;
+      --accent-hover: #4752c4;
+      --text: #f2f3f5;
+      --text-muted: #949ba4;
+      --success: #23a55a;
+      --code-bg: #090a0d;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      line-height: 1.6;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 920px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 40px;
+      padding-bottom: 24px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-logo {
+      width: 44px;
+      height: 44px;
+      background: linear-gradient(135deg, #5865f2, #eb459e);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+    }
+    .brand h1 {
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(35, 165, 90, 0.15);
+      border: 1px solid rgba(35, 165, 90, 0.4);
+      color: var(--success);
+      padding: 6px 14px;
+      border-radius: 9999px;
+      font-size: 13px;
+      font-weight: 600;
+    }
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      background: var(--success);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--success);
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+    }
+    .card h2 {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .code-block {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      padding: 14px 16px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      color: #57f287;
+      overflow-x: auto;
+      margin: 12px 0;
+    }
+    .env-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 14px;
+      font-size: 14px;
+    }
+    .env-table th, .env-table td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+    .env-table th {
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .env-var {
+      font-family: 'JetBrains Mono', monospace;
+      color: #00a8fc;
+      font-size: 13px;
+    }
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .step-item {
+      display: flex;
+      gap: 14px;
+    }
+    .step-num {
+      width: 28px;
+      height: 28px;
+      background: var(--accent);
+      color: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+      flex-shrink: 0;
+    }
+    .step-content {
+      flex: 1;
+    }
+    .step-content h3 {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .step-content p {
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+    footer {
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-top: 40px;
+      padding-top: 20px;
+      border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="brand">
+        <div class="brand-logo">⚡</div>
+        <div>
+          <h1>Onyx Serverless Ticket Suite</h1>
+          <p style="font-size: 13px; color: var(--text-muted);">Discord HTTP Interactions Engine on Vercel</p>
+        </div>
+      </div>
+      <div class="status-badge">
+        <span class="status-dot"></span>
+        <span>Ready for Discord Webhooks</span>
+      </div>
+    </header>
+
+    <div class="card">
+      <h2>🚀 Interactions Endpoint URL</h2>
+      <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 10px;">
+        Copy your Vercel deployment URL and paste it into the <strong>Interactions Endpoint URL</strong> field in the Discord Developer Portal:
+      </p>
+      <div class="code-block" id="endpoint-url">
+        https://&lt;your-deployment-domain&gt;.vercel.app/api/interactions
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>⚙️ Vercel Environment Variables</h2>
+      <p style="font-size: 14px; color: var(--text-muted);">
+        Add these variables in your Vercel Project Settings (<strong>Settings &rarr; Environment Variables</strong>):
+      </p>
+      <table class="env-table">
+        <thead>
+          <tr>
+            <th>Variable</th>
+            <th>Required</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="env-var">DISCORD_TOKEN</span></td>
+            <td><strong style="color: #da373c;">Yes</strong></td>
+            <td>Your Discord Bot Token</td>
+          </tr>
+          <tr>
+            <td><span class="env-var">DISCORD_PUBLIC_KEY</span></td>
+            <td><strong style="color: #da373c;">Yes</strong></td>
+            <td>Ed25519 Public Key from General Information tab</td>
+          </tr>
+          <tr>
+            <td><span class="env-var">DISCORD_APP_ID</span></td>
+            <td><strong style="color: #da373c;">Yes</strong></td>
+            <td>Application ID</td>
+          </tr>
+          <tr>
+            <td><span class="env-var">STAFF_ROLE_ID</span></td>
+            <td>No</td>
+            <td>Role ID allowed to view/claim all ticket channels</td>
+          </tr>
+          <tr>
+            <td><span class="env-var">DISCORD_GUILD_ID</span></td>
+            <td>No</td>
+            <td>Optional: Guild ID for instant slash command sync</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h2>📋 Quick Setup Steps</h2>
+      <div class="steps">
+        <div class="step-item">
+          <div class="step-num">1</div>
+          <div class="step-content">
+            <h3>Set Interactions Endpoint URL</h3>
+            <p>Go to Discord Developer Portal &rarr; Applications &rarr; General Information &rarr; Interactions Endpoint URL. Paste your Vercel URL ending in <code>/api/interactions</code>.</p>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">2</div>
+          <div class="step-content">
+            <h3>Register Slash Commands</h3>
+            <p>Run <code>npm run register</code> locally or via GitHub Actions with your env variables to sync <code>/setup-tickets</code> and <code>/channel</code>.</p>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">3</div>
+          <div class="step-content">
+            <h3>Deploy Ticket Panel</h3>
+            <p>In your Discord server, type <code>/setup-tickets</code> to post the interactive dropdown station.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Onyx Discord Serverless Suite &bull; Engineered for Vercel Serverless Functions
+    </footer>
+  </div>
+
+  <script>
+    if (window.location.hostname !== 'localhost') {
+      document.getElementById('endpoint-url').textContent = window.location.origin + '/api/interactions';
+    }
+  </script>
+</body>
+</html>
