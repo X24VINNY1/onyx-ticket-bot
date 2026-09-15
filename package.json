@@ -1,7 +1,7 @@
 {
-  "name": "onyx-discord-tickets-vercel",
+  "name": "zen2k-discord-tickets",
   "version": "1.0.0",
-  "description": "Serverless Discord Ticket Bot & Channel Tool built for Vercel",
+  "description": "Serverless Discord Ticket Bot & Channel Tool by officialZen2K",
   "main": "api/interactions.js",
   "type": "module",
   "scripts": {
@@ -10,5 +10,6 @@
   },
   "dependencies": {
     "discord-interactions": "^4.4.0"
-  }
+  },
+  "author": "officialZen2K"
 }
