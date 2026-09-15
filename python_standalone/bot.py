@@ -83,7 +83,7 @@ async def setup_tickets(
         value="A private channel will be automatically created between you and the server staff team. No other members will see your discussion.",
         inline=False
     )
-    embed.set_footer(text=f"{interaction.guild.name} Support System &bull; Powered by Onyx", icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
+    embed.set_footer(text=f"{interaction.guild.name} Support System &bull; Powered by Zen2K", icon_url=interaction.guild.icon.url if interaction.guild.icon else None)
 
     launcher_view = views.TicketLauncherView()
     await interaction.channel.send(embed=embed, view=launcher_view)
@@ -174,7 +174,7 @@ async def ticket_stats(interaction: discord.Interaction):
     embed.add_field(name="🟢 Open Tickets", value=str(stats["open"]), inline=True)
     embed.add_field(name="🔴 Closed Tickets", value=str(stats["closed"]), inline=True)
     embed.add_field(name="👤 Claimed Tickets", value=str(stats["claimed"]), inline=True)
-    embed.set_footer(text="Onyx Ticket Analytics")
+    embed.set_footer(text="Zen2K Analytics • Made by officialZen2K")
     await interaction.response.send_message(embed=embed)
 
 @ticket_group.command(name="set-staff", description="Configure the support staff role.")
@@ -317,11 +317,11 @@ def main():
     cfg = load_config()
     token = cfg.get("token", "").strip()
     if not token or token == "YOUR_BOT_TOKEN_HERE":
-        print("[!] ERROR: Please set your bot token in config.json or via the Onyx GUI Dashboard.")
+        print("[!] ERROR: Please set your bot token in config.json or via the Zen2K GUI Dashboard.")
         print("[!] Opening config.json location: " + os.path.abspath("config.json"))
         sys.exit(1)
 
-    print("[*] Starting Onyx Ticket Bot...")
+    print("[*] Starting Zen2K Ticket Bot...")
     bot.run(token)
 
 if __name__ == "__main__":
