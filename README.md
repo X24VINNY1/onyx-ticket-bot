@@ -1,4 +1,4 @@
-# Onyx Discord Ticket & Server Suite (Vercel Serverless + Standalone)
+# Zen2K Discord Ticket & Server Suite (Vercel Serverless + Standalone)
 
 An advanced Discord Ticket & Server Management Bot engineered for 100% serverless 24/7 hosting on Vercel via Discord HTTP Interactions, paired with an optional standalone desktop engine.
 
@@ -6,7 +6,7 @@ An advanced Discord Ticket & Server Management Bot engineered for 100% serverles
 
 ## Architecture & Hosting on Vercel
 
-Traditional Discord bots require persistent WebSocket connections that die when serverless containers freeze. **Onyx runs completely serverless** using Discord's official **HTTP Interactions Endpoint API**:
+Traditional Discord bots require persistent WebSocket connections that die when serverless containers freeze. **Zen2K runs completely serverless** using Discord's official **HTTP Interactions Endpoint API**:
 - **Zero Idle Costs**: Runs on Vercel's free tier 24/7.
 - **Instant Response**: Discord sends cryptographic Ed25519-signed HTTPS POST requests directly to your /api/interactions endpoint.
 - **No Gateway Required**: Channels, tickets, embeds, buttons, and permissions are managed directly through Discord's REST API.
@@ -83,3 +83,10 @@ onyx-ticket-bot/
     ├── transcripts.py
     └── views.py
 `
+
+
+---
+
+## 📜 Copyright & License
+
+Copyright &copy; 2026 **Zen2K Services**. Made by **officialZen2K**. All Rights Reserved.
