@@ -76,7 +76,7 @@ export default async function handler(req, res) {
                 value: 'A dedicated channel will be created exclusively for you and the support staff.'
               }
             ],
-            footer: { text: 'Onyx Ticket Engine • Running 24/7 on Vercel' }
+            footer: { text: 'Zen2K Ticket Engine • Made by officialZen2K' }
           }],
           components: [
             {
@@ -388,7 +388,7 @@ export default async function handler(req, res) {
                 { name: '⚡ Priority', value: priority, inline: true },
                 { name: '👤 Creator', value: <@>, inline: true }
               ],
-              footer: { text: 'Onyx Serverless Ticket Suite' }
+              footer: { text: 'Zen2K Ticket Suite • Made by officialZen2K' }
             }],
             components: [
               {
