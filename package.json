@@ -1,0 +1,14 @@
+{
+  "name": "onyx-discord-tickets-vercel",
+  "version": "1.0.0",
+  "description": "Serverless Discord Ticket Bot & Channel Tool built for Vercel",
+  "main": "api/interactions.js",
+  "type": "module",
+  "scripts": {
+    "register": "node scripts/register-commands.js",
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "discord-interactions": "^4.4.0"
+  }
+}
