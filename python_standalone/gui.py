@@ -65,7 +65,7 @@ class BotWorkerThread(QThread):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Onyx Discord Ticket & Server Tool")
+        self.setWindowTitle("Zen2K Discord Ticket & Server Tool (Made by officialZen2K)")
         self.resize(960, 680)
         self.bot_thread = None
         self.init_ui()
@@ -178,7 +178,7 @@ class MainWindow(QMainWindow):
 
         # Header Title Banner
         header = QHBoxLayout()
-        title = QLabel("⚡ ONYX DISCORD TICKET & SERVER TOOL")
+        title = QLabel("⚡ ZEN2K DISCORD TICKET & SERVER TOOL • MADE BY OFFICIALZEN2K")
         title.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
         title.setStyleSheet("color: #5865f2;")
         header.addWidget(title)
