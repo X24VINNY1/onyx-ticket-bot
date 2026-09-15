@@ -134,7 +134,7 @@ class TicketReasonModal(ui.Modal, title="Open Support Ticket"):
         embed.add_field(name="📝 Details", value=self.details_input.value, inline=False)
         embed.add_field(name="⚡ Priority", value=priority_str, inline=True)
         embed.add_field(name="👤 Opened By", value=f"{user.mention} ({user.id})", inline=True)
-        embed.set_footer(text="Onyx Ticket System &bull; Select an action below")
+        embed.set_footer(text="Zen2K Ticket System • Made by officialZen2K &bull; Select an action below")
 
         ping_msg = f"{user.mention}"
         if staff_role:
