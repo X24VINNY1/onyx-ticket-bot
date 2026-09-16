@@ -312,6 +312,54 @@ async function runRegistration() {
           type: 1
         }
       ]
+    },
+    {
+      name: 'setup-voice-hub',
+      description: 'Deploy the interactive Join-To-Create Temporary Voice Hub panel',
+      type: 1,
+      options: [
+        { name: 'channel', description: 'Channel to deploy voice hub panel to (default: current channel)', type: 7, required: false },
+        { name: 'category', description: 'Category to create temp voice rooms under', type: 7, required: false }
+      ]
+    },
+    {
+      name: 'vc',
+      description: 'Temporary Voice Room Controls (Lock, Unlock, Limit, Delete)',
+      type: 1,
+      options: [
+        {
+          name: 'create',
+          description: 'Create a custom temporary voice channel',
+          type: 1,
+          options: [
+            { name: 'name', description: 'Room name (e.g. 2s Park Grinding)', type: 3, required: false },
+            { name: 'limit', description: 'Max player limit (0 for unlimited, 2-99)', type: 4, required: false }
+          ]
+        },
+        {
+          name: 'lock',
+          description: 'Lock your temporary voice room from new members',
+          type: 1
+        },
+        {
+          name: 'unlock',
+          description: 'Unlock your temporary voice room',
+          type: 1
+        },
+        {
+          name: 'limit',
+          description: 'Change user limit on your voice room',
+          type: 1,
+          options: [
+            { name: 'amount', description: 'User limit (0-99)', type: 4, required: true }
+          ]
+        },
+        {
+          name: 'delete',
+          description: 'Delete your temporary voice room when finished',
+          type: 1
+        }
+      ]
     }
   ];
 
