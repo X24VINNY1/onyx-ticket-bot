@@ -272,6 +272,57 @@ async function runRegistration() {
           type: 1
         }
       ]
+    },
+    {
+      name: 'ai-do',
+      description: 'Zen2K AI Copilot: Safe natural language server actions (creates channels, setups, safe)',
+      type: 1,
+      options: [
+        {
+          name: 'prompt',
+          description: 'What you want the AI copilot to do (e.g. "make a channel called vip-chat")',
+          type: 3,
+          required: true
+        }
+      ]
+    },
+    {
+      name: 'ai-say',
+      description: 'Zen2K AI Copilot: Tell the AI what to announce or say in any channel',
+      type: 1,
+      options: [
+        {
+          name: 'message',
+          description: 'What you want the bot to say or announce',
+          type: 3,
+          required: true
+        },
+        {
+          name: 'channel',
+          description: 'Channel to send message to (default: current channel)',
+          type: 7,
+          required: false
+        },
+        {
+          name: 'title',
+          description: 'Custom headline title for the announcement embed',
+          type: 3,
+          required: false
+        },
+        {
+          name: 'style',
+          description: 'Style of announcement embed',
+          type: 3,
+          required: false,
+          choices: [
+            { name: '⚡ Zen2K Emerald (Promo / Deals / VC Drop)', value: 'emerald' },
+            { name: '📢 Official Blurple (Community & News)', value: 'blurple' },
+            { name: '🚨 Urgent Crimson (Alert / Maintenance / Rules)', value: 'alert' },
+            { name: '👑 Gold VIP (Exclusive Perks & Rewards)', value: 'gold' },
+            { name: '💬 Plain Text (Raw message, no embed card)', value: 'plain' }
+          ]
+        }
+      ]
     }
   ];
 
