@@ -187,6 +187,55 @@ async function runRegistration() {
           type: 1
         }
       ]
+    },
+    {
+      name: 'role',
+      description: 'Zen2K Role Maker & Management (Staff Only)',
+      type: 1,
+      options: [
+        {
+          name: 'create',
+          description: 'Create a custom role with custom color, hoist, and permissions',
+          type: 1,
+          options: [
+            { name: 'name', description: 'Name of the new role (e.g. VIP, Customer, Mod)', type: 3, required: true },
+            { name: 'color', description: 'Color hex or name (e.g. #00FFA3, gold, red, blue, purple)', type: 3, required: false },
+            { name: 'hoist', description: 'Display separately on member sidebar', type: 5, required: false },
+            { name: 'mentionable', description: 'Allow anyone to mention this role', type: 5, required: false }
+          ]
+        },
+        {
+          name: 'give',
+          description: 'Assign a role to a member',
+          type: 1,
+          options: [
+            { name: 'user', description: 'Member to receive role', type: 6, required: true },
+            { name: 'role', description: 'Role to assign', type: 8, required: true }
+          ]
+        },
+        {
+          name: 'remove',
+          description: 'Remove a role from a member',
+          type: 1,
+          options: [
+            { name: 'user', description: 'Member to remove role from', type: 6, required: true },
+            { name: 'role', description: 'Role to remove', type: 8, required: true }
+          ]
+        },
+        {
+          name: 'delete',
+          description: 'Permanently delete a role from the server',
+          type: 1,
+          options: [
+            { name: 'role', description: 'Role to delete', type: 8, required: true }
+          ]
+        },
+        {
+          name: 'list',
+          description: 'List all custom server roles',
+          type: 1
+        }
+      ]
     }
   ];
 
