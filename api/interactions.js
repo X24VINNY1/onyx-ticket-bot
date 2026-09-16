@@ -63,6 +63,113 @@ function parseColorHex(input) {
   return isNaN(parsed) ? 0 : parsed;
 }
 
+const PERM_FLAGS = {
+  administrator: 0x8n,
+  admin: 0x8n,
+  manage_guild: 0x20n,
+  manage_channels: 0x10n,
+  kick_members: 0x2n,
+  kick: 0x2n,
+  ban_members: 0x4n,
+  ban: 0x4n,
+  manage_messages: 0x2000n,
+  mute_members: 0x400000n,
+  deafen_members: 0x800000n,
+  move_members: 0x1000000n,
+  manage_nicknames: 0x8000000n,
+  manage_roles: 0x10000000n,
+  view_audit_log: 0x80n,
+  view_channel: 0x400n,
+  send_messages: 0x800n,
+  embed_links: 0x4000n,
+  attach_files: 0x8000n,
+  read_message_history: 0x10000n,
+  mention_everyone: 0x20000n,
+  use_external_emojis: 0x40000n,
+  connect: 0x100000n,
+  speak: 0x200000n,
+  moderate_members: 0x10000000000n,
+  timeout: 0x10000000000n
+};
+
+function resolvePermissions(input) {
+  if (!input) return { bits: '0', label: 'None (0)', list: ['No extra permissions'] };
+  const lower = input.toLowerCase().trim();
+
+  if (lower === 'admin' || lower === 'administrator') {
+    return {
+      bits: '8',
+      label: '👑 Administrator (Full Control)',
+      list: ['Full Administrator Privileges (All Permissions Granted)']
+    };
+  }
+
+  if (lower === 'mod' || lower === 'moderator') {
+    const bits = PERM_FLAGS.view_channel | PERM_FLAGS.send_messages | PERM_FLAGS.read_message_history |
+      PERM_FLAGS.embed_links | PERM_FLAGS.attach_files | PERM_FLAGS.kick_members | PERM_FLAGS.ban_members |
+      PERM_FLAGS.manage_messages | PERM_FLAGS.mute_members | PERM_FLAGS.deafen_members | PERM_FLAGS.manage_nicknames |
+      PERM_FLAGS.view_audit_log | PERM_FLAGS.moderate_members;
+    return {
+      bits: bits.toString(),
+      label: '🛡️ Moderator (Full Moderation Suite)',
+      list: ['Kick & Ban Members', 'Timeout/Mute', 'Manage & Delete Messages', 'Manage Nicknames', 'View Audit Log', 'Voice Mute & Deafen']
+    };
+  }
+
+  if (lower === 'support' || lower === 'staff') {
+    const bits = PERM_FLAGS.view_channel | PERM_FLAGS.send_messages | PERM_FLAGS.read_message_history |
+      PERM_FLAGS.embed_links | PERM_FLAGS.attach_files | PERM_FLAGS.manage_messages | PERM_FLAGS.manage_nicknames;
+    return {
+      bits: bits.toString(),
+      label: '⚡ Support Staff (Ticket & Chat Management)',
+      list: ['View Channels & History', 'Send Messages & Attach Files', 'Manage & Clean Messages', 'Manage Nicknames']
+    };
+  }
+
+  if (lower === 'member' || lower === 'customer') {
+    const bits = PERM_FLAGS.view_channel | PERM_FLAGS.send_messages | PERM_FLAGS.read_message_history |
+      PERM_FLAGS.embed_links | PERM_FLAGS.attach_files | PERM_FLAGS.connect | PERM_FLAGS.speak | PERM_FLAGS.use_external_emojis;
+    return {
+      bits: bits.toString(),
+      label: '👤 Customer / Verified Member (Standard Chat)',
+      list: ['View Channels & Read History', 'Send Messages & Embed Links', 'Attach Files', 'Voice Connect & Speak']
+    };
+  }
+
+  if (lower === 'readonly') {
+    const bits = PERM_FLAGS.view_channel | PERM_FLAGS.read_message_history;
+    return {
+      bits: bits.toString(),
+      label: '👁️ Read Only (View Only, Chat Disabled)',
+      list: ['View Channels', 'Read Message History']
+    };
+  }
+
+  if (lower === 'none') {
+    return {
+      bits: '0',
+      label: '⛔ None (0 Permissions)',
+      list: ['Default / No Server Permissions']
+    };
+  }
+
+  let combined = 0n;
+  const list = [];
+  const parts = lower.split(/[,;\s]+/);
+  for (const p of parts) {
+    if (PERM_FLAGS[p]) {
+      combined |= PERM_FLAGS[p];
+      list.push(p);
+    }
+  }
+
+  return {
+    bits: combined.toString(),
+    label: '⚙️ Custom Permissions (' + list.length + ' active)',
+    list: list.length > 0 ? list : ['None']
+  };
+}
+
 async function getBlacklistDb() {
   if (blacklistCache && (Date.now() - blacklistCacheTime < 30000)) {
     return blacklistCache;
@@ -1007,14 +1114,16 @@ async function processInteraction(interaction) {
       const subName = sub?.name;
       const subOpts = sub?.options || [];
 
-      // /role create name:<name> [color:<color>] [hoist:<bool>] [mentionable:<bool>]
+      // /role create name:<name> [color:<color>] [permissions:<preset>] [hoist:<bool>] [mentionable:<bool>]
       if (subName === 'create') {
         const rName = subOpts.find(o => o.name === 'name')?.value;
         const rColorInput = subOpts.find(o => o.name === 'color')?.value || '';
+        const rPermsInput = subOpts.find(o => o.name === 'permissions')?.value || 'none';
         const rHoist = subOpts.find(o => o.name === 'hoist')?.value || false;
         const rMention = subOpts.find(o => o.name === 'mentionable')?.value || false;
 
         const colorInt = parseColorHex(rColorInput);
+        const permsObj = resolvePermissions(rPermsInput);
 
         try {
           const createdRole = await discordFetch('/guilds/' + guild_id + '/roles', {
@@ -1022,23 +1131,33 @@ async function processInteraction(interaction) {
             body: JSON.stringify({
               name: rName,
               color: colorInt,
+              permissions: permsObj.bits,
               hoist: rHoist,
               mentionable: rMention
             })
           });
 
           const hexDisplay = '#' + (colorInt ? colorInt.toString(16).padStart(6, '0').toUpperCase() : '000000');
+          const permsBullets = permsObj.list.map(p => '• ' + p).join('\n');
 
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: {
               embeds: [{
                 title: '✨ Role Created Successfully',
-                description: '>>> 🏷️ **Role Name:** <@&' + createdRole.id + '> (`' + createdRole.name + '`)\n' +
+                description: '>>> 🏷️ **Role:** <@&' + createdRole.id + '> (`' + createdRole.name + '`)\n' +
                   '🆔 **Role ID:** `' + createdRole.id + '`\n' +
                   '🎨 **Color:** `' + hexDisplay + '`\n' +
+                  '🛡️ **Permissions:** ' + permsObj.label + '\n' +
                   '📌 **Hoisted in Sidebar:** `' + (rHoist ? 'Yes' : 'No') + '`\n' +
                   '🔔 **Mentionable:** `' + (rMention ? 'Yes' : 'No') + '`',
+                fields: [
+                  {
+                    name: '📜 Active Permission Capabilities',
+                    value: permsBullets.slice(0, 1000) || 'None',
+                    inline: false
+                  }
+                ],
                 color: colorInt || 0x57F287,
                 footer: { text: 'Zen2K Role Maker • Created by ' + user.username }
               }]
@@ -1048,6 +1167,51 @@ async function processInteraction(interaction) {
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: { content: '❌ Failed to create role: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /role permissions role:<role> level:<preset>
+      if (subName === 'permissions') {
+        const targetRoleId = subOpts.find(o => o.name === 'role')?.value;
+        const levelInput = subOpts.find(o => o.name === 'level')?.value || 'none';
+
+        const permsObj = resolvePermissions(levelInput);
+
+        try {
+          await discordFetch('/guilds/' + guild_id + '/roles/' + targetRoleId, {
+            method: 'PATCH',
+            body: JSON.stringify({
+              permissions: permsObj.bits
+            })
+          });
+
+          const permsBullets = permsObj.list.map(p => '• ' + p).join('\n');
+
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              embeds: [{
+                title: '🛡️ Role Permissions Updated',
+                description: '>>> 🏷️ **Role:** <@&' + targetRoleId + '>\n' +
+                  '🔰 **New Permission Level:** ' + permsObj.label + '\n' +
+                  '🆔 **Raw Bitmask:** `' + permsObj.bits + '`',
+                fields: [
+                  {
+                    name: '📜 Active Capabilities Granted',
+                    value: permsBullets.slice(0, 1000) || 'Default',
+                    inline: false
+                  }
+                ],
+                color: 0x5865F2,
+                footer: { text: 'Zen2K Permissions Engine • Updated by ' + user.username }
+              }]
+            }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to update role permissions: ' + err.message, flags: 64 }
           };
         }
       }
@@ -1122,7 +1286,13 @@ async function processInteraction(interaction) {
 
           const lines = sorted.map(r => {
             const hex = '#' + (r.color ? r.color.toString(16).padStart(6, '0').toUpperCase() : '000000');
-            return `• <@&${r.id}> (\`${r.name}\`) — Color: \`${hex}\` | Pos: \`${r.position}\``;
+            const pBits = BigInt(r.permissions || '0');
+            let tag = '`[MEMBER]`';
+            if ((pBits & 0x8n) === 0x8n) tag = '`[ADMIN]`';
+            else if ((pBits & 0x2000n) === 0x2000n || (pBits & 0x4n) === 0x4n) tag = '`[STAFF/MOD]`';
+            else if (pBits === 0n) tag = '`[NONE]`';
+
+            return `• <@&${r.id}> ${tag} — Color: \`${hex}\` | Pos: \`${r.position}\``;
           });
 
           return {
