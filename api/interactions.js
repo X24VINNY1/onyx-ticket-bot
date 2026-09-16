@@ -345,7 +345,7 @@ function buildProgressEmbed(ticketNum, clientTag, clientId, serviceName, tierNam
 
   const embed = {
     title: '⚡ LIVE ORDER DASHBOARD • TICKET #' + ticketNum,
-    description: '>>> 👑 **Client:** ' + (clientId ? '<@' + clientId + '>' : clientTag) + '\n📦 **Service:** `' + serviceName + '`' + (tierName ? '\n💎 **Package:** `' + tierName + '`' : '') + '\n🕒 **Estimated Delivery:** `15 - 30 Minutes`',
+    description: '>>> 👑 **Client:** ' + (clientId ? '<@' + clientId + '>' : clientTag) + '\n📦 **Service:** `' + serviceName + '`' + (tierName ? '\n💎 **Package:** `' + tierName + '`' : '') + '\n🕒 **' + (step === 4 ? 'Status' : 'Estimated Delivery') + ':** `' + (step === 4 ? 'Order Complete & Delivered!' : '15 - 30 Minutes') + '`',
     color: step === 4 ? 0x57F287 : (step >= 2 ? 0x5865F2 : 0xFEE75C),
     fields: [
       {
@@ -353,7 +353,11 @@ function buildProgressEmbed(ticketNum, clientTag, clientId, serviceName, tierNam
         value: '```\n' + current.bar + ' ' + current.percent + ' — ' + current.title + '\n```\n' + current.desc,
         inline: false
       },
-      {
+      step === 4 ? {
+        name: '⭐ LEAVE A VOUCH / REVIEW',
+        value: '>>> 🌟 **Enjoyed our service?** Please click **[ ⭐ Leave a Vouch ]** below to share your feedback!\nYour review will be posted directly to <#' + VOUCHES_CHANNEL_ID + '>.\n\n🔒 You may now safely log back in and change your credentials.',
+        inline: false
+      } : {
         name: '📋 CLIENT INSTRUCTIONS',
         value: '1️⃣ Send your platform (PSN / XBOX / PC) and credentials below.\n2️⃣ Provide 2FA backup codes if enabled to expedite delivery.\n3️⃣ Do **NOT** log in while progress shows `IN DELIVERY`.',
         inline: false
@@ -371,13 +375,25 @@ function buildProgressEmbed(ticketNum, clientTag, clientId, serviceName, tierNam
 
 // Build progress buttons inside the active ticket
 function buildProgressButtons(currentStep = 1) {
+  if (currentStep === 4) {
+    return [
+      {
+        type: 1,
+        components: [
+          { type: 2, style: 3, label: 'Leave a Vouch', custom_id: 'btn_modal_vouch', emoji: { name: '⭐' } },
+          { type: 2, style: 1, label: 'Save Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } },
+          { type: 2, style: 4, label: 'Close Ticket', custom_id: 'btn_close_ticket', emoji: { name: '🔒' } }
+        ]
+      }
+    ];
+  }
   return [
     {
       type: 1,
       components: [
         { type: 2, style: currentStep === 2 ? 3 : 1, label: 'Confirm Payment', custom_id: 'btn_prog_2', emoji: { name: '💳' } },
         { type: 2, style: currentStep === 3 ? 3 : 1, label: 'In Delivery', custom_id: 'btn_prog_3', emoji: { name: '⚙️' } },
-        { type: 2, style: currentStep === 4 ? 3 : 3, label: 'Complete Order', custom_id: 'btn_prog_4', emoji: { name: '🏆' } }
+        { type: 2, style: currentStep === 4 ? 3 : 1, label: 'Complete Order', custom_id: 'btn_prog_4', emoji: { name: '🏆' } }
       ]
     },
     {
@@ -747,7 +763,7 @@ async function processInteraction(interaction) {
         type: InteractionResponseType.MODAL,
         data: {
           custom_id: 'modal_submit_vouch',
-          title: 'Submit Vouch to #' + VOUCHES_CHANNEL_ID,
+          title: 'Zen2K • Leave a Vouch',
           components: [
             {
               type: 1,
@@ -952,31 +968,43 @@ async function processInteraction(interaction) {
       const updatedButtons = buildProgressButtons(targetStep);
 
       let notifyText = '';
+      let notifyEmbeds = [];
+      let extraComponents = [];
+
       if (targetStep === 2) {
         notifyText = '💳 **Payment Confirmed!** Verified by <@' + user.id + '>. Order is now in the fulfillment queue!';
       } else if (targetStep === 3) {
         notifyText = '⚡ **In Delivery!** <@' + (clientId || user.id) + '> Work has begun on your account. Please stay logged out of your game.';
       } else if (targetStep === 4) {
-        notifyText = '🎉 <@' + (clientId || user.id) + '> **Order Completed!** Your delivery is ready. Thank you for choosing Zen2K!';
-      }
-
-      if (notifyText) {
-        const extraComponents = targetStep === 4 ? [
+        notifyText = '🎉 <@' + (clientId || user.id) + '> **YOUR ORDER IS OFFICIALLY COMPLETE!**';
+        notifyEmbeds = [{
+          title: '⭐ PLEASE LEAVE A VOUCH / REVIEW',
+          description: '>>> Thank you for ordering with **Zen2K**!\n\nIf you enjoyed our service, please click **[ ⭐ Leave a Vouch ]** below to share your experience.\n\nAll verified customer vouches are showcased in <#' + VOUCHES_CHANNEL_ID + '>! ⭐⭐⭐⭐⭐',
+          color: 0xFEE75C,
+          image: { url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif' },
+          footer: { text: 'Zen2K Verified Service • officialZen2K' }
+        }];
+        extraComponents = [
           {
             type: 1,
             components: [
-              { type: 2, style: 3, label: 'Leave a Vouch', custom_id: 'btn_modal_vouch', emoji: { name: '⭐' } }
+              { type: 2, style: 3, label: 'Leave a Vouch', custom_id: 'btn_modal_vouch', emoji: { name: '⭐' } },
+              { type: 2, style: 1, label: 'Save Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } },
+              { type: 2, style: 4, label: 'Close Ticket', custom_id: 'btn_close_ticket', emoji: { name: '🔒' } }
             ]
           }
-        ] : [];
+        ];
+      }
+
+      if (notifyText) {
+        const postPayload = { content: notifyText };
+        if (notifyEmbeds.length > 0) postPayload.embeds = notifyEmbeds;
+        if (extraComponents.length > 0) postPayload.components = extraComponents;
 
         discordFetch('/channels/' + channel_id + '/messages', {
           method: 'POST',
-          body: JSON.stringify({
-            content: notifyText,
-            components: extraComponents
-          })
-        }).catch(() => {});
+          body: JSON.stringify(postPayload)
+        }).catch(err => console.error('Notify send error:', err));
       }
 
       return {
