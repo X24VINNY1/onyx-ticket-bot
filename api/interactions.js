@@ -1,74 +1,45 @@
 import { InteractionType, InteractionResponseType, verifyKey } from 'discord-interactions';
 
-export const config = {
-  api: {
-    bodyParser: false,
-  },
-};
-
 const DISCORD_API = 'https://discord.com/api/v10';
 
 async function discordFetch(endpoint, options = {}) {
   const token = process.env.DISCORD_TOKEN;
-  const res = await fetch(${DISCORD_API}, {
+  const res = await fetch(`${DISCORD_API}${endpoint}`, {
     ...options,
     headers: {
-      'Authorization': Bot ,
+      'Authorization': `Bot ${token}`,
       'Content-Type': 'application/json',
       ...(options.headers || {})
     }
   });
   if (!res.ok) {
     const errText = await res.text();
-    console.error(Discord API Error []:, errText);
-    throw new Error(Discord API error:  );
+    console.error(`Discord API Error [${endpoint}]:`, errText);
+    throw new Error(`Discord API error: ${res.status} ${errText}`);
   }
   return res.json().catch(() => ({}));
 }
 
-export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method Not Allowed' });
-  }
-
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  const rawBody = Buffer.concat(chunks);
-
-  const signature = req.headers['x-signature-ed25519'];
-  const timestamp = req.headers['x-signature-timestamp'];
-  const clientPublicKey = process.env.DISCORD_PUBLIC_KEY;
-
-  if (!clientPublicKey) {
-    console.error('DISCORD_PUBLIC_KEY is missing');
-    return res.status(500).json({ error: 'Server configuration error: missing public key' });
-  }
-
-  const isValidRequest = verifyKey(rawBody, signature, timestamp, clientPublicKey);
-  if (!isValidRequest) {
-    return res.status(401).send('Bad request signature');
-  }
-
-  const interaction = JSON.parse(rawBody.toString('utf-8'));
+async function processInteraction(interaction) {
   const { type, data, guild_id, member, channel_id } = interaction;
   const user = member?.user;
 
+  // TYPE 1: PING
   if (type === InteractionType.PING) {
-    return res.status(200).json({ type: InteractionResponseType.PONG });
+    return { type: InteractionResponseType.PONG };
   }
 
+  // TYPE 2: APPLICATION COMMAND
   if (type === InteractionType.APPLICATION_COMMAND) {
     const { name, options } = data;
 
     if (name === 'setup-tickets') {
-      return res.status(200).json({
+      return {
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
           embeds: [{
             title: '🎫 Support & Ticket Station',
-            description: 'Need assistance, have a billing question, or want to report a bug?\nSelect a category from the menu below to open a private ticket with our staff.',
+            description: "Need assistance, have a billing question, or want to report a bug?\\nSelect a category from the menu below to open a private ticket with our staff.",
             color: 0x5865F2,
             fields: [
               {
@@ -98,7 +69,7 @@ export default async function handler(req, res) {
             }
           ]
         }
-      });
+      };
     }
 
     if (name === 'channel') {
@@ -111,112 +82,105 @@ export default async function handler(req, res) {
         const isVoice = subOpts.find(o => o.name === 'type')?.value === 'voice';
 
         try {
-          const newCh = await discordFetch(/guilds//channels, {
+          const newCh = await discordFetch(`/guilds/${guild_id}/channels`, {
             method: 'POST',
-            body: JSON.stringify({
-              name: chName,
-              type: isVoice ? 2 : 0
-            })
+            body: JSON.stringify({ name: chName, type: isVoice ? 2 : 0 })
           });
-          return res.status(200).json({
+          return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: ✅ Created  channel: <#> }
-          });
+            data: { content: `✅ Created ${isVoice ? 'voice' : 'text'} channel: <#${newCh.id}>` }
+          };
         } catch (e) {
-          return res.status(200).json({
+          return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: ❌ Failed to create channel: , flags: 64 }
-          });
+            data: { content: `❌ Failed to create channel: ${e.message}`, flags: 64 }
+          };
         }
       }
 
       if (subName === 'delete') {
         try {
-          await discordFetch(/channels/, { method: 'DELETE' });
-          return res.status(200).json({
+          await discordFetch(`/channels/${channel_id}`, { method: 'DELETE' });
+          return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: { content: '🗑️ Channel deleted successfully.' }
-          });
+          };
         } catch (e) {
-          return res.status(200).json({
+          return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: ❌ Failed to delete channel: , flags: 64 }
-          });
+            data: { content: `❌ Failed to delete channel: ${e.message}`, flags: 64 }
+          };
         }
       }
 
       if (subName === 'purge') {
         const amount = subOpts.find(o => o.name === 'amount')?.value || 10;
         try {
-          const msgs = await discordFetch(/channels//messages?limit=);
+          const msgs = await discordFetch(`/channels/${channel_id}/messages?limit=${Math.min(amount, 100)}`);
           if (Array.isArray(msgs) && msgs.length > 0) {
             const ids = msgs.map(m => m.id);
-            await discordFetch(/channels//messages/bulk-delete, {
+            await discordFetch(`/channels/${channel_id}/messages/bulk-delete`, {
               method: 'POST',
               body: JSON.stringify({ messages: ids })
             });
           }
-          return res.status(200).json({
+          return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: 🧹 Cleared  messages., flags: 64 }
-          });
+            data: { content: `🧹 Cleared ${amount} messages.`, flags: 64 }
+          };
         } catch (e) {
-          return res.status(200).json({
+          return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: ❌ Purge error: , flags: 64 }
-          });
+            data: { content: `❌ Purge error: ${e.message}`, flags: 64 }
+          };
         }
       }
 
       if (subName === 'lock') {
         try {
-          await discordFetch(/channels//permissions/, {
+          await discordFetch(`/channels/${channel_id}/permissions/${guild_id}`, {
             method: 'PUT',
-            body: JSON.stringify({
-              type: 0,
-              deny: '2048'
-            })
+            body: JSON.stringify({ type: 0, deny: '2048' })
           });
-          return res.status(200).json({
+          return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: 🔒 Channel <#> is now locked. }
-          });
+            data: { content: `🔒 Channel <#${channel_id}> is now locked.` }
+          };
         } catch (e) {
-          return res.status(200).json({
+          return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: ❌ Error locking channel: , flags: 64 }
-          });
+            data: { content: `❌ Error locking channel: ${e.message}`, flags: 64 }
+          };
         }
       }
 
       if (subName === 'unlock') {
         try {
-          await discordFetch(/channels//permissions/, {
-            method: 'DELETE'
-          });
-          return res.status(200).json({
+          await discordFetch(`/channels/${channel_id}/permissions/${guild_id}`, { method: 'DELETE' });
+          return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: 🔓 Channel <#> is now unlocked. }
-          });
+            data: { content: `🔓 Channel <#${channel_id}> is now unlocked.` }
+          };
         } catch (e) {
-          return res.status(200).json({
+          return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: ❌ Error unlocking channel: , flags: 64 }
-          });
+            data: { content: `❌ Error unlocking channel: ${e.message}`, flags: 64 }
+          };
         }
       }
     }
   }
 
+  // TYPE 3: MESSAGE COMPONENT
   if (type === InteractionType.MESSAGE_COMPONENT) {
     const { custom_id, values } = data;
 
     if (custom_id === 'ticket_category_select') {
       const selectedCat = values[0];
-      return res.status(200).json({
+      return {
         type: InteractionResponseType.MODAL,
         data: {
-          custom_id: modal_open_ticket_,
+          custom_id: `modal_open_ticket_${selectedCat}`,
           title: 'Open Support Ticket',
           components: [
             {
@@ -263,71 +227,75 @@ export default async function handler(req, res) {
             }
           ]
         }
-      });
+      };
     }
 
     if (custom_id === 'btn_close_ticket') {
       try {
-        await discordFetch(/channels//messages, {
+        await discordFetch(`/channels/${channel_id}/messages`, {
           method: 'POST',
           body: JSON.stringify({ content: '🔒 **Ticket closing. Channel will be deleted in 4 seconds...**' })
         });
 
         setTimeout(async () => {
           try {
-            await discordFetch(/channels/, { method: 'DELETE' });
+            await discordFetch(`/channels/${channel_id}`, { method: 'DELETE' });
           } catch (err) {
             console.error('Delete channel error:', err);
           }
         }, 4000);
 
-        return res.status(200).json({
+        return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: 🔒 Closing confirmed by <@>. }
-        });
+          data: { content: `🔒 Closing confirmed by <@${user.id}>.` }
+        };
       } catch (e) {
-        return res.status(200).json({
+        return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: ❌ Error closing channel: , flags: 64 }
-        });
+          data: { content: `❌ Error closing channel: ${e.message}`, flags: 64 }
+        };
       }
     }
 
     if (custom_id === 'btn_claim_ticket') {
-      return res.status(200).json({
+      return {
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
           embeds: [{
             title: '👤 Ticket Claimed',
-            description: This ticket has been claimed by <@>. They will be handling your request from here.,
+            description: `This ticket has been claimed by <@${user.id}>. They will be handling your request from here.`,
             color: 0x23A55A
           }]
         }
-      });
+      };
     }
 
     if (custom_id === 'btn_transcript_ticket') {
       try {
-        const msgs = await discordFetch(/channels//messages?limit=100);
+        const msgs = await discordFetch(`/channels/${channel_id}/messages?limit=100`);
         const messageList = Array.isArray(msgs) ? msgs.reverse() : [];
-        const lines = messageList.map(m => [] : );
+        const lines = messageList.map(m => `[${new Date(m.timestamp).toISOString()}] ${m.author.username}: ${m.content}`);
         const transcriptText = lines.join('\n');
 
-        return res.status(200).json({
+        return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: {
-            content: 📑 **Ticket Transcript Export ( messages):**\n\\	ext\n\n\\`
+            content: `📑 **Ticket Transcript Export (${messageList.length} messages):**
+\`\`\`text
+${transcriptText.slice(-1800)}
+\`\`\``
           }
-        });
+        };
       } catch (e) {
-        return res.status(200).json({
+        return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: ❌ Failed to fetch transcript: , flags: 64 }
-        });
+          data: { content: `❌ Failed to fetch transcript: ${e.message}`, flags: 64 }
+        };
       }
     }
   }
 
+  // TYPE 5: MODAL SUBMIT
   if (type === InteractionType.MODAL_SUBMIT) {
     const customId = data.custom_id;
 
@@ -338,55 +306,43 @@ export default async function handler(req, res) {
       const priority = data.components[2]?.components[0]?.value || 'Normal';
 
       const ticketRandom = Math.floor(1000 + Math.random() * 9000);
-      const chName = 	icket--;
+      const chName = `ticket-${ticketRandom}-${category}`;
 
       try {
         const overwrites = [
-          {
-            id: guild_id,
-            type: 0,
-            deny: '1024'
-          },
-          {
-            id: user.id,
-            type: 1,
-            allow: '68608'
-          }
+          { id: guild_id, type: 0, deny: '1024' },
+          { id: user.id, type: 1, allow: '68608' }
         ];
 
         const staffRoleId = process.env.STAFF_ROLE_ID;
         if (staffRoleId) {
-          overwrites.push({
-            id: staffRoleId,
-            type: 0,
-            allow: '68608'
-          });
+          overwrites.push({ id: staffRoleId, type: 0, allow: '68608' });
         }
 
-        const newChannel = await discordFetch(/guilds//channels, {
+        const newChannel = await discordFetch(`/guilds/${guild_id}/channels`, {
           method: 'POST',
           body: JSON.stringify({
             name: chName,
             type: 0,
             permission_overwrites: overwrites,
-            topic: Ticket # | Opened by  () | Category: 
+            topic: `Ticket #${ticketRandom} | Opened by ${user.username} (${user.id}) | Category: ${category}`
           })
         });
 
-        const staffPing = staffRoleId ?  | <@&> : '';
-        await discordFetch(/channels//messages, {
+        const staffPing = staffRoleId ? ` | <@&${staffRoleId}>` : '';
+        await discordFetch(`/channels/${newChannel.id}/messages`, {
           method: 'POST',
           body: JSON.stringify({
-            content: <@>,
+            content: `<@${user.id}>${staffPing}`,
             embeds: [{
-              title: 🎫 Ticket # • ,
-              description: Welcome <@>! Staff has been alerted and will assist you shortly.,
+              title: `🎫 Ticket #${ticketRandom} • ${category.toUpperCase()}`,
+              description: `Welcome <@${user.id}>! Staff has been alerted and will assist you shortly.`,
               color: 0x5865F2,
               fields: [
                 { name: '📌 Topic', value: topic, inline: false },
                 { name: '📝 Details', value: details, inline: false },
                 { name: '⚡ Priority', value: priority, inline: true },
-                { name: '👤 Creator', value: <@>, inline: true }
+                { name: '👤 Creator', value: `<@${user.id}>`, inline: true }
               ],
               footer: { text: 'Zen2K Ticket Suite • Made by officialZen2K' }
             }],
@@ -403,28 +359,107 @@ export default async function handler(req, res) {
           })
         });
 
-        return res.status(200).json({
+        return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: {
-            content: ✅ Your ticket has been created: <#>,
-            flags: 64
-          }
-        });
+          data: { content: `✅ Your ticket has been created: <#${newChannel.id}>`, flags: 64 }
+        };
       } catch (err) {
         console.error('Failed to create ticket channel:', err);
-        return res.status(200).json({
+        return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: {
-            content: ❌ Failed to create ticket channel: ,
-            flags: 64
-          }
-        });
+          data: { content: `❌ Failed to create ticket channel: ${err.message}`, flags: 64 }
+        };
       }
     }
   }
 
-  return res.status(200).json({
+  return {
     type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
     data: { content: 'Unhandled interaction.', flags: 64 }
-  });
+  };
+}
+
+export async function POST(request) {
+  try {
+    const signature = request.headers.get('x-signature-ed25519');
+    const timestamp = request.headers.get('x-signature-timestamp');
+    const rawBody = await request.text();
+
+    const clientPublicKey = process.env.DISCORD_PUBLIC_KEY;
+    if (!clientPublicKey) {
+      return new Response(JSON.stringify({ error: 'Server configuration error: missing public key' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const isValid = await verifyKey(rawBody, signature || '', timestamp || '', clientPublicKey);
+    if (!isValid) {
+      return new Response('Bad request signature', { status: 401 });
+    }
+
+    const interaction = JSON.parse(rawBody);
+    const responsePayload = await processInteraction(interaction);
+
+    return new Response(JSON.stringify(responsePayload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  } catch (err) {
+    console.error('Web POST error:', err);
+    return new Response(JSON.stringify({ error: err.message }), {
+      status: 500,
+      headers: { 'Content-Type': 'application/json' }
+    });
+  }
+}
+
+export default async function handler(req, res) {
+  if (req instanceof Request || (req.headers && typeof req.headers.get === 'function' && typeof req.text === 'function')) {
+    return POST(req);
+  }
+
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method Not Allowed' });
+  }
+
+  try {
+    const signature = req.headers['x-signature-ed25519'];
+    const timestamp = req.headers['x-signature-timestamp'];
+    const clientPublicKey = process.env.DISCORD_PUBLIC_KEY;
+
+    if (!clientPublicKey) {
+      return res.status(500).json({ error: 'Server configuration error: missing public key' });
+    }
+
+    let rawBody = '';
+    if (typeof req.body === 'string') {
+      rawBody = req.body;
+    } else if (Buffer.isBuffer(req.body)) {
+      rawBody = req.body.toString('utf-8');
+    } else if (req.body && typeof req.body === 'object') {
+      rawBody = JSON.stringify(req.body);
+    } else {
+      const chunks = [];
+      for await (const chunk of req) {
+        chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+      }
+      rawBody = Buffer.concat(chunks).toString('utf-8');
+    }
+
+    const isValid = await verifyKey(rawBody, signature || '', timestamp || '', clientPublicKey);
+    if (!isValid) {
+      return res.status(401).send('Bad request signature');
+    }
+
+    const interaction = typeof req.body === 'object' && req.body !== null && !Buffer.isBuffer(req.body)
+      ? req.body
+      : JSON.parse(rawBody);
+
+    const responsePayload = await processInteraction(interaction);
+    return res.status(200).json(responsePayload);
+  } catch (err) {
+    console.error('Node handler error:', err);
+    return res.status(500).json({ error: err.message });
+  }
 }
