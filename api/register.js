@@ -150,6 +150,43 @@ async function runRegistration() {
           type: 1
         }
       ]
+    },
+    {
+      name: 'blacklist',
+      description: 'Zen2K Anti-Troll & Blacklist Management (Staff Only)',
+      type: 1,
+      options: [
+        {
+          name: 'add',
+          description: 'Block a user from opening tickets or placing orders',
+          type: 1,
+          options: [
+            { name: 'user', description: 'User to blacklist', type: 6, required: true },
+            { name: 'reason', description: 'Reason for blacklist (e.g. Chargeback, Troll)', type: 3, required: false }
+          ]
+        },
+        {
+          name: 'remove',
+          description: 'Unblock a user from the blacklist',
+          type: 1,
+          options: [
+            { name: 'user', description: 'User to unblacklist', type: 6, required: true }
+          ]
+        },
+        {
+          name: 'check',
+          description: 'Check if a user is currently blacklisted',
+          type: 1,
+          options: [
+            { name: 'user', description: 'User to check', type: 6, required: true }
+          ]
+        },
+        {
+          name: 'list',
+          description: 'View all currently blacklisted users',
+          type: 1
+        }
+      ]
     }
   ];
 
