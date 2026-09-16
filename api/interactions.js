@@ -370,7 +370,6 @@ function buildVoiceControlPanelPayload() {
       title: '🎛️ Zen2K Voice Room Control Center',
       description: '>>> **Welcome to the Master Voice Channel Manager!**\n\nWhen you enter the **`🔊 Join to Create`** channel (<#1549599780257144923>), your private room is generated.\n\nUse the buttons below to lock your room, mute/unmute members, adjust slots, or delete your squad channel.',
       color: 0x5865F2,
-      image: { url: 'https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif' },
       fields: [
         {
           name: '🔒 Privacy & Management',
@@ -875,7 +874,6 @@ async function processInteraction(interaction) {
 
     // --- /setup-tickets ---
     if (name === 'setup-tickets') {
-      const bannerUrl = 'https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif';
       return {
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
@@ -883,7 +881,6 @@ async function processInteraction(interaction) {
             title: '⚡ Zen2K Support & Ticket Station',
             description: '>>> **Welcome to the official Zen2K Service Portal!**\n\nNeed instant delivery, custom development, billing help, or have a question?\nSelect a service category below to open a private encrypted channel with staff.',
             color: 0x5865F2,
-            image: { url: bannerUrl },
             fields: [
               {
                 name: '🛡️ Encrypted & Private',
@@ -933,28 +930,32 @@ async function processInteraction(interaction) {
       const targetRoleId = options?.find(o => o.name === 'role')?.value || VERIFIED_ROLE_ID;
       const targetChannelId = options?.find(o => o.name === 'channel')?.value;
       const customBanner = options?.find(o => o.name === 'banner_url')?.value;
-      const bannerUrl = customBanner || 'https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif';
+
+      const verifyEmbed = {
+        title: '🛡️ Zen2K Member Verification Station',
+        description: '>>> **Welcome to the official Zen2K Community!**\n\nTo protect the server from automated bots and keep transactions secure, all members must verify their account.\n\nClick the button below to verify and receive the <@&' + targetRoleId + '> role instantly.',
+        color: 0x00FFA3,
+        fields: [
+          {
+            name: '🔓 Verification Unlocks',
+            value: '• Full access to community chat & voice channels\n• Official VC pricing tables & instant project quotes\n• Private 1-on-1 encrypted order tickets & staff support',
+            inline: false
+          },
+          {
+            name: '📜 Security Policy',
+            value: '• 0 tolerance for chargebacks, spam, or scams\n• Verified anti-troll blacklist system active 24/7',
+            inline: false
+          }
+        ],
+        footer: { text: 'Zen2K Security Engine • Made by officialZen2K' }
+      };
+
+      if (customBanner) {
+        verifyEmbed.image = { url: customBanner };
+      }
 
       const verifyPayload = {
-        embeds: [{
-          title: '🛡️ Zen2K Member Verification Station',
-          description: '>>> **Welcome to the official Zen2K Community!**\n\nTo protect the server from automated bots and keep transactions secure, all members must verify their account.\n\nClick the button below to verify and receive the <@&' + targetRoleId + '> role instantly.',
-          color: 0x00FFA3,
-          image: { url: bannerUrl },
-          fields: [
-            {
-              name: '🔓 Verification Unlocks',
-              value: '• Full access to community chat & voice channels\n• Official VC pricing tables & instant project quotes\n• Private 1-on-1 encrypted order tickets & staff support',
-              inline: false
-            },
-            {
-              name: '📜 Security Policy',
-              value: '• 0 tolerance for chargebacks, spam, or scams\n• Verified anti-troll blacklist system active 24/7',
-              inline: false
-            }
-          ],
-          footer: { text: 'Zen2K Security Engine • Made by officialZen2K' }
-        }],
+        embeds: [verifyEmbed],
         components: [
           {
             type: 1,
