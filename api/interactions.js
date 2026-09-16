@@ -47,7 +47,7 @@ function calculateAiQuote(projectText, speed = 'standard', budget = '') {
     baseMax += 35;
     scopeItems.push('Automated Payment Verification & Webhook Handling');
   }
-  if (lower.includes('fivem') || lower.includes('lua') || lower.includes('game') || lower.includes('roblox') || lower.includes('vc')) {
+  if (lower.includes('fivem') || lower.includes('lua') || lower.includes('game') || lower.includes('roblox') || lower.includes('vc') || lower.includes('2k')) {
     baseMin += 20;
     baseMax += 40;
     scopeItems.push('Direct Account Loading & Ban-Proof Delivery');
@@ -81,40 +81,136 @@ function calculateAiQuote(projectText, speed = 'standard', budget = '') {
 }
 
 // Parse pricing tiers cleanly from user input
-function parseTiers(tiersRaw, priceRaw, serviceName) {
+function parseTiers(tiersRaw, priceRaw, serviceName = '') {
   const result = [];
-  if (tiersRaw && tiersRaw.trim()) {
-    const parts = tiersRaw.split(',');
-    for (const part of parts) {
-      const trimmed = part.trim();
-      if (!trimmed) continue;
-      const sub = trimmed.split(/[-–—:]/);
-      if (sub.length >= 2) {
-        const name = sub[0].trim();
-        const price = sub.slice(1).join('-').trim();
-        result.push({ name, price });
-      } else {
-        result.push({ name: trimmed, price: '' });
-      }
-    }
-  }
+  const raw = (tiersRaw && tiersRaw.trim()) ? tiersRaw : (priceRaw || '');
 
-  // If no explicit tiers but price has multiple (e.g. 60$ for 450k 120$ for 900k)
-  if (result.length === 0 && priceRaw) {
-    const matches = [...priceRaw.matchAll(/(\$?\d+[kKmM]?)\s*(?:for|-|:)?\s*(\$?\d+[kKmM]?)/gi)];
+  // Split by comma or semicolon
+  let segments = [];
+  if (raw.includes(',')) {
+    segments = raw.split(',');
+  } else if (raw.includes(';')) {
+    segments = raw.split(';');
+  } else {
+    // Check if space-separated entries like '60$ for 450k 120$ for 900k 150$ for 1.4m'
+    const chunkRegex = /(\$?\d+(?:\.\d+)?[kKmM]?\$?)\s*(?:for|-|:|–)?\s*(\$?\d+(?:\.\d+)?[kKmM]?\$?)/gi;
+    const matches = [...raw.matchAll(chunkRegex)];
     if (matches.length >= 2) {
       for (const m of matches) {
-        result.push({ name: m[2] ? m[2] + ' Tier' : m[0], price: m[1] });
+        segments.push(m[0]);
+      }
+    } else {
+      segments = [raw];
+    }
+  }
+
+  for (const seg of segments) {
+    const s = seg.trim();
+    if (!s) continue;
+
+    // Detect price: e.g. "$60", "60$", "$120.00"
+    const priceMatch = s.match(/(?:\$\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*\$)/);
+    // Detect amount/tier: e.g. "450k", "900k", "1.4M", "450,000"
+    const amountMatch = s.match(/(\d+(?:\.\d+)?\s*[kKmM](?:\s*VC)?|\d{1,3}(?:,\d{3})+\s*(?:VC)?)/i);
+
+    if (priceMatch && amountMatch) {
+      let pr = priceMatch[0].replace(/\s+/g, '');
+      if (pr.endsWith('$')) pr = '$' + pr.slice(0, -1);
+      else if (!pr.startsWith('$')) pr = '$' + pr;
+
+      let amt = amountMatch[0].trim();
+      if (!amt.toUpperCase().includes('VC') && serviceName.toLowerCase().includes('vc')) {
+        amt += ' VC';
+      }
+      result.push({ name: amt, price: pr });
+    } else {
+      const sub = s.split(/[-–—:]/);
+      if (sub.length >= 2) {
+        let pName = sub[0].trim();
+        let pPrice = sub.slice(1).join('-').trim();
+        if (pPrice && !pPrice.startsWith('$') && !isNaN(pPrice)) pPrice = '$' + pPrice;
+        result.push({ name: pName, price: pPrice });
+      } else {
+        result.push({ name: s, price: '' });
       }
     }
   }
 
-  // Fallback if still empty
   if (result.length === 0) {
     result.push({ name: serviceName || 'Standard Package', price: priceRaw || 'Contact Staff' });
   }
-
   return result;
+}
+
+// Build Tier Buttons (NO DROPDOWN OVERLAP! Clean 1-click ordering)
+function buildTierButtons(tiers, serviceName) {
+  const rows = [];
+  const emojis = ['🪙', '⚡', '💎', '👑', '🔥'];
+
+  // If 1 to 5 tiers: Put them in Row 1!
+  if (tiers.length <= 5) {
+    const tierComponents = tiers.map((t, idx) => {
+      const sanitizedName = t.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
+      const sanitizedPrice = t.price.replace(/[^a-zA-Z0-9$]/g, '').slice(0, 10);
+      const labelText = (t.name + (t.price ? ' • ' + t.price : '')).slice(0, 80);
+      return {
+        type: 2,
+        style: idx === 1 ? 3 : 1, // Highlight 2nd tier with green (most popular)
+        label: labelText,
+        custom_id: 'btn_tier_' + idx + '_' + sanitizedName + '_' + sanitizedPrice,
+        emoji: { name: emojis[idx % emojis.length] }
+      };
+    });
+    rows.push({ type: 1, components: tierComponents });
+  } else {
+    // 6 to 10 tiers: split across 2 rows of up to 5
+    const row1 = tiers.slice(0, 5).map((t, idx) => ({
+      type: 2,
+      style: 1,
+      label: (t.name + (t.price ? ' • ' + t.price : '')).slice(0, 80),
+      custom_id: 'btn_tier_' + idx + '_' + t.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15) + '_' + t.price.replace(/[^a-zA-Z0-9$]/g, '').slice(0, 10),
+      emoji: { name: emojis[idx % emojis.length] }
+    }));
+    const row2 = tiers.slice(5, 10).map((t, idx) => ({
+      type: 2,
+      style: 1,
+      label: (t.name + (t.price ? ' • ' + t.price : '')).slice(0, 80),
+      custom_id: 'btn_tier_' + (idx + 5) + '_' + t.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15) + '_' + t.price.replace(/[^a-zA-Z0-9$]/g, '').slice(0, 10),
+      emoji: { name: emojis[(idx + 5) % emojis.length] }
+    }));
+    rows.push({ type: 1, components: row1 });
+    rows.push({ type: 1, components: row2 });
+  }
+
+  // Row 2: Action & Trust Buttons (Perfect 3-button symmetrical row)
+  rows.push({
+    type: 1,
+    components: [
+      {
+        type: 2,
+        style: 2,
+        label: 'Custom Order',
+        custom_id: 'btn_order_pkg_' + serviceName.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 25),
+        emoji: { name: '🛒' }
+      },
+      {
+        type: 2,
+        style: 2,
+        label: 'Ask Questions',
+        custom_id: 'btn_order_inquire',
+        emoji: { name: '❓' }
+      },
+      {
+        type: 2,
+        style: 2,
+        label: 'Verified Vouches',
+        custom_id: 'btn_view_reviews',
+        emoji: { name: '⭐' }
+      }
+    ]
+  });
+
+  return rows;
 }
 
 // Build progress embed
@@ -155,7 +251,7 @@ function buildProgressEmbed(ticketNum, clientTag, clientId, serviceName, tierNam
   return embed;
 }
 
-// Build progress buttons
+// Build progress buttons inside the ticket
 function buildProgressButtons(currentStep = 1) {
   return [
     {
@@ -252,6 +348,14 @@ async function processInteraction(interaction) {
       const parsedTiers = parseTiers(tiersRaw, price, serviceName);
       const featureList = rawFeatures.split(',').map(f => '✅ ' + f.trim()).join('\n');
 
+      // Beautiful markdown tier list that never cuts off on phones
+      const tierBullets = parsedTiers.map((t, idx) => {
+        const badge = idx === 0 ? '🪙' : (idx === 1 ? '⚡' : (idx === 2 ? '💎' : '🔥'));
+        const tag = idx === 1 ? ' *(🔥 Most Popular)*' : (idx === 2 ? ' *(👑 Best Value)*' : '');
+        return badge + ' **' + t.name + '** ➔ `' + (t.price || 'Inquire') + '`' + tag;
+      }).join('\n');
+
+      // Clean ASCII table for desktop
       let tiersTable = '';
       if (parsedTiers.length > 0) {
         tiersTable = '```\n' +
@@ -266,12 +370,8 @@ async function processInteraction(interaction) {
         tiersTable += '└──────────────────────────────┴─────────────┘\n```';
       }
 
-      const selectOptions = parsedTiers.map((t, idx) => ({
-        label: (t.name + (t.price ? ' (' + t.price + ')' : '')).slice(0, 100),
-        value: 'tier_sel_' + idx + '_' + t.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20),
-        description: ('Order ' + t.name + ' • Instant Delivery').slice(0, 100),
-        emoji: { name: idx === 0 ? '🪙' : (idx === 1 ? '⚡' : '💎') }
-      }));
+      // Build clean 1-click tier buttons (NO OVERLAPPING POPUP DROPDOWN!)
+      const buttonRows = buildTierButtons(parsedTiers, serviceName);
 
       return {
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -279,56 +379,18 @@ async function processInteraction(interaction) {
           embeds: [{
             title: '⚡ ' + serviceName + ' • Pricing & Live Ordering',
             description: '>>> **' + desc + '**\n\n' +
-              '💰 **Base Rate / Price:** `' + price + '`\n' +
-              '✨ **Select a package below or click Order to open your private ticket!**',
+              '💰 **Pricing Overview:** `' + price + '`\n\n' +
+              '✨ **Click any package button below for instant 1-click order ticket!**',
             color: 0x00FFA3,
             image: { url: bannerUrl },
             fields: [
-              ...(tiersTable ? [{ name: '💎 AVAILABLE PACKAGES & RATES', value: tiersTable, inline: false }] : []),
+              { name: '💎 AVAILABLE PACKAGES & RATES', value: tierBullets + '\n' + tiersTable, inline: false },
               { name: '🛡️ GUARANTEE & ADVANTAGES', value: featureList, inline: false },
               { name: '💳 ACCEPTED PAYMENT METHODS', value: payment, inline: false }
             ],
-            footer: { text: 'Zen2K Business • Select a tier dropdown or click below to order' }
+            footer: { text: 'Zen2K Business • Click your package below to open an order ticket' }
           }],
-          components: [
-            {
-              type: 1,
-              components: [
-                {
-                  type: 3,
-                  custom_id: 'pricing_tier_select_' + serviceName.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 25),
-                  placeholder: '👉 Select your ' + serviceName.slice(0, 30) + ' package...',
-                  options: selectOptions
-                }
-              ]
-            },
-            {
-              type: 1,
-              components: [
-                {
-                  type: 2,
-                  style: 3,
-                  label: 'Order ' + serviceName.slice(0, 45),
-                  custom_id: 'btn_order_pkg_' + serviceName.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30),
-                  emoji: { name: '🛒' }
-                },
-                {
-                  type: 2,
-                  style: 2,
-                  label: 'Ask Questions',
-                  custom_id: 'btn_order_inquire',
-                  emoji: { name: '❓' }
-                },
-                {
-                  type: 2,
-                  style: 2,
-                  label: 'Verified Vouches',
-                  custom_id: 'btn_view_reviews',
-                  emoji: { name: '⭐' }
-                }
-              ]
-            }
-          ]
+          components: buttonRows
         }
       };
     }
@@ -487,11 +549,14 @@ async function processInteraction(interaction) {
           flags: 64,
           embeds: [{
             title: '⭐ Zen2K Verified Customer Reviews',
-            description: '>>> **Trust Score: 4.98 / 5.0 (320+ Orders Delivered)**\n\n' +
-              '💬 *"Delivered 900k VC in literally 15 minutes, 100% legit."* — `@kyro`\n' +
-              '💬 *"Fastest bot setup I have ever seen. Good prices too."* — `@dante`\n' +
-              '💬 *"Safe and clean delivery, no bans, reliable guy."* — `@jordan`\n\n' +
-              '✅ All transactions protected with direct staff verification.',
+            description: '>>> **Trust Score: 4.98 / 5.0 (340+ Orders Delivered)**\n\n' +
+              '⭐ ⭐ ⭐ ⭐ ⭐\n' +
+              '💬 *"Delivered 900k VC on my console in under 15 minutes, 100% legit."* — `@kyro`\n\n' +
+              '⭐ ⭐ ⭐ ⭐ ⭐\n' +
+              '💬 *"Vouch for Zen2K! Ban-proof, fast communication, legit seller."* — `@dante`\n\n' +
+              '⭐ ⭐ ⭐ ⭐ ⭐\n' +
+              '💬 *"Second time buying, got the 1.4M VC pack. Done super fast."* — `@jordan`\n\n' +
+              '✅ All transactions protected with direct staff verification & warranty.',
             color: 0xFEE75C,
             footer: { text: 'Zen2K Verified Merchant • officialZen2K' }
           }]
@@ -555,12 +620,20 @@ async function processInteraction(interaction) {
       };
     }
 
-    // Tier Dropdown Select OR Order Button
-    if (custom_id.startsWith('pricing_tier_select_') || custom_id.startsWith('btn_order_pkg_') || custom_id === 'btn_order_inquire' || custom_id === 'btn_quote_accept') {
-      let serviceLabel = 'Service';
+    // Direct Tier Button Click (1-Click Order) OR Legacy Dropdown OR General Buttons
+    if (custom_id.startsWith('btn_tier_') || custom_id.startsWith('pricing_tier_select_') || custom_id.startsWith('btn_order_pkg_') || custom_id === 'btn_order_inquire' || custom_id === 'btn_quote_accept') {
+      let serviceLabel = 'Service Order';
       let tierLabel = '';
 
-      if (custom_id.startsWith('pricing_tier_select_')) {
+      if (custom_id.startsWith('btn_tier_')) {
+        // e.g. btn_tier_0_450KVC_$60
+        const parts = custom_id.replace('btn_tier_', '').split('_');
+        const tIdx = parts[0];
+        const tName = parts[1] || ('Tier #' + tIdx);
+        const tPrice = parts[2] || '';
+        tierLabel = tName + (tPrice ? ' (' + tPrice + ')' : '');
+        serviceLabel = 'Order';
+      } else if (custom_id.startsWith('pricing_tier_select_')) {
         const rawSelected = values?.[0] || '';
         serviceLabel = custom_id.replace('pricing_tier_select_', '').replace(/_/g, ' ');
         tierLabel = rawSelected.replace(/^tier_sel_\d+_/, '');
@@ -573,7 +646,8 @@ async function processInteraction(interaction) {
       }
 
       const ticketRandom = Math.floor(1000 + Math.random() * 9000);
-      const chName = 'order-' + ticketRandom + '-' + user.username.slice(0, 10).toLowerCase();
+      const safeTierSlug = tierLabel ? tierLabel.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 8) : 'order';
+      const chName = 'ticket-' + safeTierSlug + '-' + ticketRandom;
 
       try {
         const overwrites = [
