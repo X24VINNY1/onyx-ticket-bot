@@ -4,6 +4,7 @@ const DISCORD_API = 'https://discord.com/api/v10';
 const TICKETS_CATEGORY_ID = process.env.TICKETS_CATEGORY_ID || '1529702797082365962';
 const TRANSCRIPTS_CHANNEL_ID = process.env.TRANSCRIPTS_CHANNEL_ID || '1529702818796015718';
 const VOUCHES_CHANNEL_ID = process.env.VOUCHES_CHANNEL_ID || '1529699140953702400';
+const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID || '1529699129176100914';
 
 async function discordFetch(endpoint, options = {}) {
   const token = process.env.DISCORD_TOKEN;
@@ -726,6 +727,140 @@ async function processInteraction(interaction) {
       };
     }
 
+    // --- /setup-verify (Deploy Verification Panel) ---
+    if (name === 'setup-verify') {
+      if (!isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **Access Denied:** Only Zen2K staff can deploy the verification station.', flags: 64 }
+        };
+      }
+
+      const targetRoleId = options?.find(o => o.name === 'role')?.value || VERIFIED_ROLE_ID;
+      const targetChannelId = options?.find(o => o.name === 'channel')?.value;
+      const customBanner = options?.find(o => o.name === 'banner_url')?.value;
+      const bannerUrl = customBanner || 'https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif';
+
+      const verifyPayload = {
+        embeds: [{
+          title: '🛡️ Zen2K Member Verification Station',
+          description: '>>> **Welcome to the official Zen2K Community!**\n\nTo protect the server from automated bots and keep transactions secure, all members must verify their account.\n\nClick the button below to verify and receive the <@&' + targetRoleId + '> role instantly.',
+          color: 0x00FFA3,
+          image: { url: bannerUrl },
+          fields: [
+            {
+              name: '🔓 Verification Unlocks',
+              value: '• Full access to community chat & voice channels\n• Official VC pricing tables & instant project quotes\n• Private 1-on-1 encrypted order tickets & staff support',
+              inline: false
+            },
+            {
+              name: '📜 Security Policy',
+              value: '• 0 tolerance for chargebacks, spam, or scams\n• Verified anti-troll blacklist system active 24/7',
+              inline: false
+            }
+          ],
+          footer: { text: 'Zen2K Security Engine • Made by officialZen2K' }
+        }],
+        components: [
+          {
+            type: 1,
+            components: [
+              {
+                type: 2,
+                style: 3, // SUCCESS (Green)
+                custom_id: 'btn_verify_member:' + targetRoleId,
+                label: 'Verify Account',
+                emoji: { name: '🛡️' }
+              },
+              {
+                type: 2,
+                style: 2, // SECONDARY (Grey)
+                custom_id: 'btn_view_reviews',
+                label: 'Customer Vouches',
+                emoji: { name: '⭐' }
+              }
+            ]
+          }
+        ]
+      };
+
+      if (targetChannelId && targetChannelId !== channel_id) {
+        try {
+          await discordFetch('/channels/' + targetChannelId + '/messages', {
+            method: 'POST',
+            body: JSON.stringify(verifyPayload)
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '✅ Verification Station successfully deployed in <#' + targetChannelId + '>!', flags: 64 }
+          };
+        } catch (e) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to deploy in <#' + targetChannelId + '>: ' + e.message, flags: 64 }
+          };
+        }
+      }
+
+      return {
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: verifyPayload
+      };
+    }
+
+    // --- /verify (Direct Manual Verification Command) ---
+    if (name === 'verify') {
+      const isBlacklisted = await isMemberBlacklisted(guild_id, member);
+      if (isBlacklisted) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [{
+              title: '⛔ Verification Denied',
+              description: '>>> Your account is currently on the Zen2K blacklist.\nYou are not eligible to verify or access community channels.',
+              color: 0xED4245,
+              footer: { text: 'Zen2K Security • Anti-Troll Engine' }
+            }],
+            flags: 64
+          }
+        };
+      }
+
+      if (member?.roles && member.roles.includes(VERIFIED_ROLE_ID)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '✅ **Already Verified:** You already have the <@&' + VERIFIED_ROLE_ID + '> role and full server access!', flags: 64 }
+        };
+      }
+
+      try {
+        await discordFetch('/guilds/' + guild_id + '/members/' + user.id + '/roles/' + VERIFIED_ROLE_ID, {
+          method: 'PUT'
+        });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [{
+              title: '🎉 Verification Successful!',
+              description: '>>> Welcome to **officialZen2K**!\nYou have been granted the <@&' + VERIFIED_ROLE_ID + '> role.\n\nAll server channels, pricing drops, and order ticket stations are now unlocked for your account.',
+              color: 0x00FFA3,
+              fields: [
+                { name: '👤 Verified Member', value: `<@${user.id}>`, inline: true },
+                { name: '🏷️ Role Granted', value: `<@&${VERIFIED_ROLE_ID}>`, inline: true }
+              ],
+              footer: { text: 'Zen2K Verification Engine • officialZen2K' }
+            }],
+            flags: 64
+          }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **Verification Error:** Failed to assign role: ' + err.message + '\n*(Staff: ensure the bot role is dragged ABOVE the <@&' + VERIFIED_ROLE_ID + '> role in Discord Server Settings > Roles)*', flags: 64 }
+        };
+      }
+    }
+
     // --- /pricing-create ---
     if (name === 'pricing-create') {
       const serviceName = options.find(o => o.name === 'service')?.value || 'Custom Service';
@@ -1321,6 +1456,73 @@ async function processInteraction(interaction) {
   // TYPE 3: MESSAGE COMPONENT
   if (type === InteractionType.MESSAGE_COMPONENT) {
     const { custom_id, values } = data;
+
+    // Verify Member Button
+    if (custom_id.startsWith('btn_verify_member')) {
+      const parts = custom_id.split(':');
+      const roleIdToGrant = parts[1] || VERIFIED_ROLE_ID;
+
+      // 1. Check blacklist
+      const isBlacklisted = await isMemberBlacklisted(guild_id, member);
+      if (isBlacklisted) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [{
+              title: '⛔ Verification Denied',
+              description: '>>> Your account is currently on the Zen2K blacklist.\nYou are not eligible to verify or access community channels.',
+              color: 0xED4245,
+              footer: { text: 'Zen2K Security • Anti-Troll Engine' }
+            }],
+            flags: 64
+          }
+        };
+      }
+
+      // 2. Check if already verified
+      if (member?.roles && member.roles.includes(roleIdToGrant)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: '✅ **Already Verified:** You already have the <@&' + roleIdToGrant + '> role and full server access!',
+            flags: 64
+          }
+        };
+      }
+
+      // 3. Grant the role
+      try {
+        await discordFetch('/guilds/' + guild_id + '/members/' + user.id + '/roles/' + roleIdToGrant, {
+          method: 'PUT'
+        });
+
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [{
+              title: '🎉 Verification Successful!',
+              description: '>>> Welcome to **officialZen2K**!\nYou have been verified and granted the <@&' + roleIdToGrant + '> role.\n\nAll server channels, pricing drops, and order ticket stations are now unlocked.',
+              color: 0x00FFA3,
+              fields: [
+                { name: '👤 Verified Member', value: `<@${user.id}>`, inline: true },
+                { name: '🏷️ Role Granted', value: `<@&${roleIdToGrant}>`, inline: true }
+              ],
+              footer: { text: 'Zen2K Verification Engine • officialZen2K' }
+            }],
+            flags: 64
+          }
+        };
+      } catch (err) {
+        console.error('Failed to grant verified role:', err);
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: '❌ **Verification Error:** Failed to assign role: ' + err.message + '\n*(Staff: please ensure the bot role is positioned ABOVE the <@&' + roleIdToGrant + '> role in Discord Server Settings > Roles)*',
+            flags: 64
+          }
+        };
+      }
+    }
 
     // Vouches Button
     if (custom_id === 'btn_view_reviews') {
