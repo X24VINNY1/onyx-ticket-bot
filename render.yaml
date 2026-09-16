@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: zen2k-ticket-bot
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python render_bot.py
+    envVars:
+      - key: DISCORD_TOKEN
+        sync: false
