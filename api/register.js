@@ -47,19 +47,21 @@ async function runRegistration() {
     },
     {
       name: 'pricing-create',
-      description: 'Create a business pricing embed with an attached Order Ticket button (tickettool style)',
+      description: 'Create an animated pricing embed with Tier Dropdowns and Order Ticket buttons',
       type: 1,
       options: [
-        { name: 'service', description: 'Product or Service Title (e.g. Discord Bot, FiveM Script)', type: 3, required: true },
-        { name: 'price', description: 'Price tag (e.g. $25.00 or Starting at $15)', type: 3, required: true },
-        { name: 'description', description: 'Overview description of what is included', type: 3, required: true },
-        { name: 'features', description: 'Comma-separated features list (e.g. Fast Delivery, 24/7 Hosting, Admin Panel)', type: 3, required: false },
-        { name: 'payment', description: 'Payment methods accepted (e.g. CashApp, PayPal, Crypto)', type: 3, required: false }
+        { name: 'service', description: 'Product or Service Title (e.g. PSN & XBOX VC, Discord Bot)', type: 3, required: true },
+        { name: 'price', description: 'Price tag or overview (e.g. $60 for 450K, $120 for 900K)', type: 3, required: true },
+        { name: 'description', description: 'Overview description or requirements (e.g. WILL NEED ACCOUNT INFO)', type: 3, required: true },
+        { name: 'tiers', description: 'Comma-separated tiers for dropdown (e.g. 450K - $60, 900K - $120, 1.4M - $150)', type: 3, required: false },
+        { name: 'features', description: 'Comma-separated features list (e.g. Fast Delivery, 24/7 Support, Safe & Ban-Proof)', type: 3, required: false },
+        { name: 'payment', description: 'Payment methods accepted (e.g. CashApp, Crypto, Apple Pay)', type: 3, required: false },
+        { name: 'banner_url', description: 'Animated banner GIF image URL', type: 3, required: false }
       ]
     },
     {
       name: 'ai-quote',
-      description: 'AI-powered project price estimator that builds a formal quote embed with an Order button',
+      description: 'AI-powered project price estimator that builds an animated quote embed with an Order button',
       type: 1,
       options: [
         { name: 'project', description: 'Describe what the client or project needs', type: 3, required: true },
