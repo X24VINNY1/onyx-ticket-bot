@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -106,25 +106,23 @@
       overflow-x: auto;
       margin: 12px 0;
     }
-    .env-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 14px;
+    .btn {
+      background: var(--accent);
+      color: #ffffff;
+      border: none;
+      padding: 10px 22px;
+      border-radius: 8px;
+      font-weight: 700;
       font-size: 14px;
+      cursor: pointer;
+      transition: background 0.2s;
     }
-    .env-table th, .env-table td {
-      text-align: left;
-      padding: 10px 12px;
-      border-bottom: 1px solid var(--border);
+    .btn:hover {
+      background: var(--accent-hover);
     }
-    .env-table th {
-      color: var(--text-muted);
-      font-weight: 600;
-    }
-    .env-var {
-      font-family: 'JetBrains Mono', monospace;
-      color: #00a8fc;
-      font-size: 13px;
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
     }
     .steps {
       display: flex;
@@ -177,7 +175,7 @@
         <div class="brand-logo">⚡</div>
         <div>
           <h1>Zen2K Serverless Ticket Suite</h1>
-          <p style="font-size: 13px; color: var(--text-muted);">Discord HTTP Interactions Engine on Vercel</p>
+          <p style="font-size: 13px; color: var(--text-muted);">Discord HTTP Interactions Engine on Vercel • Made by officialZen2K</p>
         </div>
       </div>
       <div class="status-badge">
@@ -186,81 +184,59 @@
       </div>
     </header>
 
+    <!-- 1-Click Sync Card -->
+    <div class="card" style="border: 1px solid #5865f2; background: rgba(88, 101, 242, 0.08);">
+      <h2>⚡ One-Click Slash Command Sync</h2>
+      <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 14px;">
+        Click the button below to register <code>/setup-tickets</code> and <code>/channel</code> commands directly into Discord via Vercel:
+      </p>
+      <button class="btn" id="sync-btn" onclick="syncCommands()">
+        🔄 Sync Slash Commands to Discord
+      </button>
+      <div id="sync-result" style="margin-top: 14px; font-size: 13px; font-weight: 600; display: none;"></div>
+    </div>
+
+    <!-- Endpoint Card -->
     <div class="card">
       <h2>🚀 Interactions Endpoint URL</h2>
       <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 10px;">
-        Copy your Vercel deployment URL and paste it into the <strong>Interactions Endpoint URL</strong> field in the Discord Developer Portal:
+        This is your verified Discord Interactions URL:
       </p>
       <div class="code-block" id="endpoint-url">
-        https://&lt;your-deployment-domain&gt;.vercel.app/api/interactions
+        https://zen2k-ticket-bot.vercel.app/api/interactions
       </div>
     </div>
 
+    <!-- Commands Guide -->
     <div class="card">
-      <h2>⚙️ Vercel Environment Variables</h2>
-      <p style="font-size: 14px; color: var(--text-muted);">
-        Add these variables in your Vercel Project Settings (<strong>Settings &rarr; Environment Variables</strong>):
-      </p>
-      <table class="env-table">
-        <thead>
-          <tr>
-            <th>Variable</th>
-            <th>Required</th>
-            <th>Description</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><span class="env-var">DISCORD_TOKEN</span></td>
-            <td><strong style="color: #da373c;">Yes</strong></td>
-            <td>Your Discord Bot Token</td>
-          </tr>
-          <tr>
-            <td><span class="env-var">DISCORD_PUBLIC_KEY</span></td>
-            <td><strong style="color: #da373c;">Yes</strong></td>
-            <td>Ed25519 Public Key from General Information tab</td>
-          </tr>
-          <tr>
-            <td><span class="env-var">DISCORD_APP_ID</span></td>
-            <td><strong style="color: #da373c;">Yes</strong></td>
-            <td>Application ID</td>
-          </tr>
-          <tr>
-            <td><span class="env-var">STAFF_ROLE_ID</span></td>
-            <td>No</td>
-            <td>Role ID allowed to view/claim all ticket channels</td>
-          </tr>
-          <tr>
-            <td><span class="env-var">DISCORD_GUILD_ID</span></td>
-            <td>No</td>
-            <td>Optional: Guild ID for instant slash command sync</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <h2>📋 Quick Setup Steps</h2>
+      <h2>🎮 Discord In-Server Commands</h2>
       <div class="steps">
         <div class="step-item">
           <div class="step-num">1</div>
           <div class="step-content">
-            <h3>Set Interactions Endpoint URL</h3>
-            <p>Go to Discord Developer Portal &rarr; Applications &rarr; General Information &rarr; Interactions Endpoint URL. Paste your Vercel URL ending in <code>/api/interactions</code>.</p>
+            <h3><code>/setup-tickets</code></h3>
+            <p>Deploys the interactive ticket station embed with the category dropdown menu in your server.</p>
           </div>
         </div>
         <div class="step-item">
           <div class="step-num">2</div>
           <div class="step-content">
-            <h3>Register Slash Commands</h3>
-            <p>Run <code>npm run register</code> locally or via GitHub Actions with your env variables to sync <code>/setup-tickets</code> and <code>/channel</code>.</p>
+            <h3><code>/channel create &lt;name&gt; [type]</code></h3>
+            <p>Creates a brand new text or voice channel instantly.</p>
           </div>
         </div>
         <div class="step-item">
           <div class="step-num">3</div>
           <div class="step-content">
-            <h3>Deploy Ticket Panel</h3>
-            <p>In your Discord server, type <code>/setup-tickets</code> to post the interactive dropdown station.</p>
+            <h3><code>/channel purge &lt;amount&gt;</code></h3>
+            <p>Cleans up messages in bulk (1-100 messages) in seconds.</p>
+          </div>
+        </div>
+        <div class="step-item">
+          <div class="step-num">4</div>
+          <div class="step-content">
+            <h3><code>/channel lock</code> & <code>/channel unlock</code></h3>
+            <p>Locks down standard member permissions in the channel.</p>
           </div>
         </div>
       </div>
@@ -274,6 +250,36 @@
   <script>
     if (window.location.hostname !== 'localhost') {
       document.getElementById('endpoint-url').textContent = window.location.origin + '/api/interactions';
+    }
+
+    async function syncCommands() {
+      const btn = document.getElementById('sync-btn');
+      const resDiv = document.getElementById('sync-result');
+      btn.disabled = true;
+      btn.textContent = '⏳ Syncing to Discord...';
+      resDiv.style.display = 'block';
+      resDiv.style.color = '#949ba4';
+      resDiv.textContent = 'Contacting Discord REST API...';
+
+      try {
+        const res = await fetch('/api/register', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          resDiv.style.color = '#57f287';
+          resDiv.textContent = '✅ ' + data.message;
+          btn.textContent = '✅ Synced Successfully!';
+        } else {
+          resDiv.style.color = '#da373c';
+          resDiv.textContent = '❌ Error: ' + (data.error || 'Failed to sync');
+          btn.disabled = false;
+          btn.textContent = '🔄 Try Again';
+        }
+      } catch (err) {
+        resDiv.style.color = '#da373c';
+        resDiv.textContent = '❌ Network error: ' + err.message;
+        btn.disabled = false;
+        btn.textContent = '🔄 Try Again';
+      }
     }
   </script>
 </body>
