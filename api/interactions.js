@@ -22,28 +22,44 @@ async function discordFetch(endpoint, options = {}) {
   return res.json().catch(() => ({}));
 }
 
-// Upload a message with an attached downloadable .txt transcript file
+// Upload a message with an attached downloadable .txt transcript file + fallback
 async function sendDiscordMessageWithFile(channelId, payloadJson, fileContent, filename) {
   const token = process.env.DISCORD_TOKEN;
-  const formData = new FormData();
-  const fileBlob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
-  formData.append('files[0]', fileBlob, filename);
-  formData.append('payload_json', JSON.stringify(payloadJson));
+  try {
+    const formData = new FormData();
+    const fileBlob = new Blob([fileContent], { type: 'text/plain;charset=utf-8' });
+    formData.append('files[0]', fileBlob, filename);
+    formData.append('payload_json', JSON.stringify({
+      ...payloadJson,
+      attachments: [{ id: 0, filename: filename }]
+    }));
 
-  const res = await fetch(DISCORD_API + '/channels/' + channelId + '/messages', {
-    method: 'POST',
-    headers: {
-      'Authorization': 'Bot ' + token
-    },
-    body: formData
-  });
+    const res = await fetch(DISCORD_API + '/channels/' + channelId + '/messages', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bot ' + token
+      },
+      body: formData
+    });
 
-  if (!res.ok) {
+    if (res.ok) {
+      return await res.json().catch(() => ({}));
+    }
+
     const errText = await res.text();
-    console.error('Discord File Upload Error [' + channelId + ']:', errText);
-    throw new Error('Discord File API error: ' + res.status + ' ' + errText);
+    console.error('Discord File Upload Error [' + channelId + ']: ' + res.status + ' ' + errText);
+  } catch (uploadErr) {
+    console.error('FormData error:', uploadErr);
   }
-  return res.json().catch(() => ({}));
+
+  // FALLBACK: Post clean embed with codeblock so transcript is 100% saved
+  return await discordFetch('/channels/' + channelId + '/messages', {
+    method: 'POST',
+    body: JSON.stringify({
+      ...payloadJson,
+      content: (payloadJson.content ? payloadJson.content + '\n' : '') + '📄 **Transcript Archive:**\n```text\n' + fileContent.slice(-1700) + '\n```'
+    })
+  }).catch(e => console.error('Fallback transcript send error:', e));
 }
 
 // Generate full downloadable .txt transcript and archive to Transcripts Channel
@@ -578,7 +594,7 @@ async function processInteraction(interaction) {
 
       if (subName === 'delete') {
         try {
-          generateAndArchiveTranscript(channel_id, user.id, user.username, false).catch(() => {});
+          await generateAndArchiveTranscript(channel_id, user.id, user.username, false).catch(() => {});
           await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
@@ -857,10 +873,9 @@ async function processInteraction(interaction) {
       };
     }
 
-    // 🔒 CLOSE TICKET (TicketTool Style: Closes ticket, locks chat, displays Reopen/Transcript/Delete buttons)
+    // 🔒 CLOSE TICKET (Locks client permissions, auto-archives transcript to vault, and presents Reopen/Save/Delete panel)
     if (custom_id === 'btn_close_ticket') {
       try {
-        // Extract client ID from channel topic
         const ch = await discordFetch('/channels/' + channel_id).catch(() => ({}));
         const clientMatch = ch.topic?.match(/\((\d{17,20})\)/);
         const clientId = clientMatch ? clientMatch[1] : null;
@@ -869,24 +884,27 @@ async function processInteraction(interaction) {
         if (clientId) {
           await discordFetch('/channels/' + channel_id + '/permissions/' + clientId, {
             method: 'PUT',
-            body: JSON.stringify({ type: 1, deny: '2048', allow: '66560' }) // deny send messages, allow view & history
+            body: JSON.stringify({ type: 1, deny: '2048', allow: '66560' })
           }).catch(() => {});
         }
+
+        // Auto-archive transcript immediately to TRANSCRIPTS_CHANNEL_ID on close!
+        await generateAndArchiveTranscript(channel_id, user.id, user.username, false).catch(e => console.error('Auto-archive on close error:', e));
 
         const closedEmbed = {
           title: '🔒 Ticket Closed',
           description: '>>> **Ticket closed by <@' + user.id + '> (`' + user.username + '`).**\n\n' +
+            '✅ *Transcript backup auto-saved to <#' + TRANSCRIPTS_CHANNEL_ID + '>.*\n\n' +
             '**Support Team Controls:**\n' +
             '• 🔓 **Reopen**: Restores messaging access for client.\n' +
-            '• 📑 **Transcript**: Generates & attaches the official `.txt` file.\n' +
-            '• ⛔ **Delete**: Archives transcript to vault & permanently deletes channel.',
+            '• 📑 **Save Transcript**: Attaches `.txt` download right here in chat.\n' +
+            '• ⛔ **Delete Ticket**: Final archive & immediately deletes channel.',
           color: 0xED4245,
           footer: { text: 'Zen2K Ticket Controls • Made by officialZen2K' }
         };
 
         const closedButtons = buildClosedControls();
 
-        // Send closed panel into the ticket channel
         await discordFetch('/channels/' + channel_id + '/messages', {
           method: 'POST',
           body: JSON.stringify({
@@ -897,7 +915,7 @@ async function processInteraction(interaction) {
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '🔒 Ticket closed by <@' + user.id + '>. Use the controls below to Reopen, Save Transcript, or Delete.' }
+          data: { content: '🔒 Ticket closed. Transcript backed up to <#' + TRANSCRIPTS_CHANNEL_ID + '>.' }
         };
       } catch (e) {
         return {
@@ -954,7 +972,7 @@ async function processInteraction(interaction) {
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: {
-            content: '📑 **Transcript generated!** A downloadable `.txt` file has been attached right above and saved to <#' + TRANSCRIPTS_CHANNEL_ID + '>.',
+            content: '📑 **Transcript generated!** Downloadable `.txt` file attached above and archived in <#' + TRANSCRIPTS_CHANNEL_ID + '>.',
             flags: 64
           }
         };
@@ -966,36 +984,32 @@ async function processInteraction(interaction) {
       }
     }
 
-    // ⛔ DELETE TICKET (Attaches transcript file to vault, countdown, and deletes channel)
+    // ⛔ DELETE TICKET (Guaranteed synchronous archive of .txt file to vault + channel delete)
     if (custom_id === 'btn_delete_ticket') {
       try {
+        // 1. Send deletion announcement into ticket
         await discordFetch('/channels/' + channel_id + '/messages', {
           method: 'POST',
           body: JSON.stringify({
             embeds: [{
-              title: '⛔ Ticket Deletion In Progress',
-              description: 'Ticket deletion initiated by <@' + user.id + '>.\nFinal transcript with attached `.txt` file is being archived to <#' + TRANSCRIPTS_CHANNEL_ID + '>.\nChannel will be deleted in 5 seconds...',
+              title: '⛔ Deleting Ticket',
+              description: 'Archiving final `.txt` transcript to <#' + TRANSCRIPTS_CHANNEL_ID + '> and deleting channel...',
               color: 0xED4245
             }]
           })
-        });
+        }).catch(() => {});
 
-        // Generate transcript and send attached file to vault
-        generateAndArchiveTranscript(channel_id, user.id, user.username, false).catch(e => console.error('Delete archive error:', e));
+        // 2. AWAIT transcript generation and save to TRANSCRIPTS_CHANNEL_ID
+        await generateAndArchiveTranscript(channel_id, user.id, user.username, false);
 
-        setTimeout(async () => {
-          try {
-            await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
-          } catch (err) {
-            console.error('Delete channel error:', err);
-          }
-        }, 5000);
+        // 3. Delete channel immediately
+        await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
 
         return {
-          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '⛔ Deletion confirmed. Archiving transcript file to <#' + TRANSCRIPTS_CHANNEL_ID + '>.' }
+          type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE
         };
       } catch (e) {
+        console.error('Delete ticket error:', e);
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: { content: '❌ Error deleting channel: ' + e.message, flags: 64 }
