@@ -1029,14 +1029,14 @@ async function processInteraction(interaction) {
       };
     }
 
-    // 🔒 CLOSE TICKET (Locks client chat permissions, presents Reopen/Save/Vouch/Delete panel - NO auto-save)
+    // 🔒 CLOSE TICKET (Locks client chat permissions, auto-archives transcript to Transcripts channel, presents Reopen/Save/Vouch/Delete panel)
     if (custom_id === 'btn_close_ticket') {
       try {
         const ch = await discordFetch('/channels/' + channel_id).catch(() => ({}));
         const clientMatch = ch.topic?.match(/\((\d{17,20})\)/);
         const clientId = clientMatch ? clientMatch[1] : null;
 
-        // Lock channel permissions so client cannot type while ticket is closed
+        // 1. Lock channel permissions so client cannot type while ticket is closed
         if (clientId) {
           await discordFetch('/channels/' + channel_id + '/permissions/' + clientId, {
             method: 'PUT',
@@ -1044,13 +1044,20 @@ async function processInteraction(interaction) {
           }).catch(() => {});
         }
 
+        // 2. Auto-generate transcript and archive to Transcripts Channel (1529702818796015718) & local channel
+        await generateAndArchiveTranscript(channel_id, user.id, user.username, true).catch(err => {
+          console.error('Auto transcript on close error:', err);
+        });
+
+        // 3. Post closed controls panel
         const closedEmbed = {
           title: '🔒 Ticket Closed',
           description: '>>> **Ticket closed by <@' + user.id + '> (`' + user.username + '`).**\n\n' +
+            '📑 **Transcript:** Saved to <#' + TRANSCRIPTS_CHANNEL_ID + '>.\n\n' +
             '**Support Team Controls:**\n' +
             '• 🔓 **Reopen**: Restores messaging access for client.\n' +
-            '• 📑 **Save Transcript**: Attaches downloadable `.txt` file.\n' +
-            '• ⭐ **Leave a Vouch**: Submit a vouch to <#' + VOUCHES_CHANNEL_ID + '>.\n' +
+            '• 📑 **Save Transcript**: Download `.txt` file again.\n' +
+            '• ⭐ **Leave a Vouch**: Submit a customer review to <#' + VOUCHES_CHANNEL_ID + '>.\n' +
             '• ⛔ **Delete Ticket**: Permanently deletes this channel immediately.',
           color: 0xED4245,
           footer: { text: 'Zen2K Ticket Controls • Made by officialZen2K' }
@@ -1068,7 +1075,7 @@ async function processInteraction(interaction) {
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '🔒 Ticket closed by <@' + user.id + '>.' }
+          data: { content: '🔒 Ticket closed by <@' + user.id + '>. Transcript saved to <#' + TRANSCRIPTS_CHANNEL_ID + '>.' }
         };
       } catch (e) {
         return {
