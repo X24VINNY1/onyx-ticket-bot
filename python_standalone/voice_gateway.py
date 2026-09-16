@@ -6,7 +6,7 @@ import json
 import asyncio
 
 JOIN_TO_CREATE_ID = 1549599780257144923
-VOICE_OANEL_CHANNEL_ID = 1549599836913803284
+VOICE_PANEL_CHANNEL_ID = 1549599836913803284
 
 def get_token():
     env_token = os.environ.get("DISCORD_TOKEN")
@@ -14,7 +14,7 @@ def get_token():
         return env_token.strip()
     if len(sys.argv) > 1 and len(sys.argv[1]) > 30:
         return sys.argv[1].strip()
-    cfg_path = os.path.join(os.path.dername(__file__), "config.json")
+    cfg_path = os.path.join(os.path.dirname(__file__), "config.json")
     if os.path.exists(cfg_path):
         try:
             with open(cfg_path, "r", encoding="utf-8-sig") as f:
@@ -26,7 +26,8 @@ def get_token():
     return None
 
 intents = discord.Intents.default()
-intents.guilds = TrueJintents.voice_states = True
+intents.guilds = True
+intents.voice_states = True
 
 bot = commands.Bot(command_prefix="!", intents=intents, help_command=None)
 created_rooms = {}
@@ -36,7 +37,7 @@ async def on_ready():
     print("=" * 60)
     print(f" [OK] Zen2K Voice Gateway Online: {bot.user} (ID: {bot.user.id})")
     print(f" [OK] Join-to-Create Channel ID:  {JOIN_TO_CREATE_ID}")
-    print(f" [OK] Control Panel Channel ID:   {VOICE_OANEL_CHANNEL_ID}")
+    print(f" [OK] Control Panel Channel ID:   {VOICE_PANEL_CHANNEL_ID}")
     print("=" * 60)
     await bot.change_presence(
         activity=discord.Activity(
@@ -73,7 +74,7 @@ async def on_voice_state_update(member, before, after):
                 reason="Zen2K: Join-to-Create Squad Room"
             )
             created_rooms[new_channel.id] = member.id
-            print(f"[+] Created room {room_name} ({ew_channel.id}) for {member.display_name}")
+            print(f"[+] Created room {room_name} ({new_channel.id}) for {member.display_name}")
 
             await member.move_to(new_channel, reason="Zen2K: Moved to personal squad room")
             print(f"[+] Successfully moved {member.display_name} into {new_channel.name}")
