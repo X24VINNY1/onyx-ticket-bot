@@ -366,10 +366,6 @@ function buildProgressEmbed(ticketNum, clientTag, clientId, serviceName, tierNam
     footer: { text: 'Zen2K Order Engine • Handled by ' + staffInfo + ' • Made by officialZen2K' }
   };
 
-  if (step === 4) {
-    embed.image = { url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif' };
-  }
-
   return embed;
 }
 
@@ -548,6 +544,7 @@ async function processInteraction(interaction) {
       const service = options.find(o => o.name === 'service')?.value || 'Zen2K Service';
       const starsNum = options.find(o => o.name === 'stars')?.value || 5;
       const targetChannelId = options.find(o => o.name === 'channel')?.value || VOUCHES_CHANNEL_ID;
+      const customImg = options.find(o => o.name === 'image')?.value || '';
 
       const starString = '⭐'.repeat(starsNum) + (starsNum === 5 ? ' (5/5 Stars • Flawless)' : ' (' + starsNum + '/5 Stars)');
 
@@ -558,9 +555,12 @@ async function processInteraction(interaction) {
           '⭐ **Customer Rating:** ' + starString + '\n\n' +
           '💬 **Feedback:**\n*" ' + review + ' "*',
         color: 0xFEE75C,
-        image: { url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif' },
         footer: { text: 'Zen2K Verified Transaction • Logged by ' + user.username + ' • officialZen2K' }
       };
+
+      if (customImg && (customImg.startsWith('http://') || customImg.startsWith('https://'))) {
+        vouchEmbed.image = { url: customImg };
+      }
 
       await discordFetch('/channels/' + targetChannelId + '/messages', {
         method: 'POST',
@@ -806,6 +806,20 @@ async function processInteraction(interaction) {
                   max_length: 500
                 }
               ]
+            },
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  custom_id: 'vouch_image',
+                  label: 'Screenshot / Proof Image (Optional)',
+                  style: 1,
+                  placeholder: 'Paste screenshot link (or post image directly in ticket)',
+                  required: false,
+                  max_length: 500
+                }
+              ]
             }
           ]
         }
@@ -981,7 +995,6 @@ async function processInteraction(interaction) {
           title: '⭐ PLEASE LEAVE A VOUCH / REVIEW',
           description: '>>> Thank you for ordering with **Zen2K**!\n\nIf you enjoyed our service, please click **[ ⭐ Leave a Vouch ]** below to share your experience.\n\nAll verified customer vouches are showcased in <#' + VOUCHES_CHANNEL_ID + '>! ⭐⭐⭐⭐⭐',
           color: 0xFEE75C,
-          image: { url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif' },
           footer: { text: 'Zen2K Verified Service • officialZen2K' }
         }];
         extraComponents = [
@@ -1161,23 +1174,56 @@ async function processInteraction(interaction) {
 
     // Vouch Submission Modal Submit -> ALWAYS POSTS TO VOUCHES_CHANNEL_ID (1529699140953702400)
     if (customId === 'modal_submit_vouch') {
-      const service = data.components[0].components[0].value;
-      const rawRating = parseInt(data.components[1].components[0].value, 10) || 5;
-      const comment = data.components[2].components[0].value;
+      const service = data.components[0]?.components[0]?.value || 'Zen2K Service';
+      const rawRating = parseInt(data.components[1]?.components[0]?.value, 10) || 5;
+      const comment = data.components[2]?.components[0]?.value || 'Great service!';
+      const rawImage = data.components[3]?.components[0]?.value?.trim() || '';
 
       const starsNum = Math.min(Math.max(rawRating, 1), 5);
       const starString = '⭐'.repeat(starsNum) + (starsNum === 5 ? ' (5/5 Stars • Flawless)' : ' (' + starsNum + '/5 Stars)');
+
+      // Custom image determination: direct input OR auto-detect from ticket channel
+      let finalImageUrl = '';
+      if (rawImage && (rawImage.startsWith('http://') || rawImage.startsWith('https://'))) {
+        finalImageUrl = rawImage;
+      } else if (channel_id) {
+        try {
+          const recentMsgs = await discordFetch('/channels/' + channel_id + '/messages?limit=15').catch(() => []);
+          if (Array.isArray(recentMsgs)) {
+            for (const m of recentMsgs) {
+              if (m.attachments && m.attachments.length > 0) {
+                const imgAtt = m.attachments.find(a => a.content_type?.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(a.url || a.filename || ''));
+                if (imgAtt) {
+                  finalImageUrl = imgAtt.url;
+                  break;
+                }
+              }
+              const match = m.content?.match(/https?:\/\/\S+\.(?:png|jpe?g|webp|gif)(?:\?\S+)?/i);
+              if (match) {
+                finalImageUrl = match[0];
+                break;
+              }
+            }
+          }
+        } catch (scanErr) {
+          console.error('Scan recent messages for image error:', scanErr);
+        }
+      }
 
       const vouchEmbed = {
         title: '⭐ OFFICIAL ZEN2K CUSTOMER VOUCH',
         description: '>>> 👤 **Verified Client:** <@' + user.id + '> (`' + user.username + '`)\n' +
           '📦 **Service / Package:** `' + service + '`\n' +
           '⭐ **Customer Rating:** ' + starString + '\n\n' +
-          '💬 **Feedback:**\n*" ' + comment + ' "*',
+          '💬 **Feedback:**\n*" ' + comment + ' "*' +
+          (finalImageUrl ? '\n\n🖼️ **Proof / Screenshot:** Attached below' : ''),
         color: 0xFEE75C,
-        image: { url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif' },
         footer: { text: 'Zen2K Verified Transaction • Submitted by ' + user.username + ' • officialZen2K' }
       };
+
+      if (finalImageUrl) {
+        vouchEmbed.image = { url: finalImageUrl };
+      }
 
       // 1. Post directly into the designated Vouches Channel (1529699140953702400)
       await discordFetch('/channels/' + VOUCHES_CHANNEL_ID + '/messages', {
