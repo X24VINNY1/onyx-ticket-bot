@@ -448,7 +448,6 @@ async function runRegistration() {
             title: '🎛️ Zen2K Voice Room Control Center',
             description: '>>> **Welcome to the Master Voice Channel Manager!**\n\nWhen you enter the **`🔊 Join to Create`** channel (<#1549599780257144923>), your private room is generated.\n\nUse the buttons below to lock your room, mute/unmute members, adjust slots, or delete your squad channel.',
             color: 0x5865F2,
-            image: { url: 'https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif' },
             fields: [
               {
                 name: '🔒 Privacy & Management',
