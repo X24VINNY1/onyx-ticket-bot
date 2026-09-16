@@ -220,6 +220,57 @@ async function saveBlacklistDb(db) {
   }
 }
 
+let autoroleCache = null;
+let autoroleCacheTime = 0;
+
+async function getAutoroleDb() {
+  if (autoroleCache && (Date.now() - autoroleCacheTime < 30000)) {
+    return autoroleCache;
+  }
+  try {
+    const msgs = await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages?limit=50').catch(() => []);
+    if (Array.isArray(msgs)) {
+      const dbMsg = msgs.find(m => m.content && m.content.includes('ZEN2K_AUTOROLE_CONFIG_DB'));
+      if (dbMsg) {
+        const jsonMatch = dbMsg.content.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          autoroleCache = JSON.parse(jsonMatch[1]);
+          autoroleCacheTime = Date.now();
+          return autoroleCache;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error reading autorole DB:', err);
+  }
+  autoroleCache = { roleId: VERIFIED_ROLE_ID, enabled: true };
+  autoroleCacheTime = Date.now();
+  return autoroleCache;
+}
+
+async function saveAutoroleDb(db) {
+  autoroleCache = db;
+  autoroleCacheTime = Date.now();
+  const dbText = '⚙️ **ZEN2K_AUTOROLE_CONFIG_DB** (Do Not Delete)\n```json\n' + JSON.stringify(db, null, 2) + '\n```';
+  try {
+    const msgs = await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages?limit=50').catch(() => []);
+    const existing = Array.isArray(msgs) ? msgs.find(m => m.content && m.content.includes('ZEN2K_AUTOROLE_CONFIG_DB')) : null;
+    if (existing) {
+      await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages/' + existing.id, {
+        method: 'PATCH',
+        body: JSON.stringify({ content: dbText })
+      });
+    } else {
+      await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages', {
+        method: 'POST',
+        body: JSON.stringify({ content: dbText })
+      });
+    }
+  } catch (err) {
+    console.error('Error saving autorole DB:', err);
+  }
+}
+
 async function getBlacklistRoleId(guildId) {
   if (blacklistRoleIdCache) return blacklistRoleIdCache;
   try {
@@ -826,15 +877,18 @@ async function processInteraction(interaction) {
         };
       }
 
-      if (member?.roles && member.roles.includes(VERIFIED_ROLE_ID)) {
+      const autoDb = await getAutoroleDb();
+      const roleIdToGrant = autoDb?.roleId || VERIFIED_ROLE_ID;
+
+      if (member?.roles && member.roles.includes(roleIdToGrant)) {
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '✅ **Already Verified:** You already have the <@&' + VERIFIED_ROLE_ID + '> role and full server access!', flags: 64 }
+          data: { content: '✅ **Already Verified:** You already have the <@&' + roleIdToGrant + '> role and full server access!', flags: 64 }
         };
       }
 
       try {
-        await discordFetch('/guilds/' + guild_id + '/members/' + user.id + '/roles/' + VERIFIED_ROLE_ID, {
+        await discordFetch('/guilds/' + guild_id + '/members/' + user.id + '/roles/' + roleIdToGrant, {
           method: 'PUT'
         });
         return {
@@ -842,11 +896,11 @@ async function processInteraction(interaction) {
           data: {
             embeds: [{
               title: '🎉 Verification Successful!',
-              description: '>>> Welcome to **officialZen2K**!\nYou have been granted the <@&' + VERIFIED_ROLE_ID + '> role.\n\nAll server channels, pricing drops, and order ticket stations are now unlocked for your account.',
+              description: '>>> Welcome to **officialZen2K**!\nYou have been granted the <@&' + roleIdToGrant + '> role.\n\nAll server channels, pricing drops, and order ticket stations are now unlocked for your account.',
               color: 0x00FFA3,
               fields: [
                 { name: '👤 Verified Member', value: `<@${user.id}>`, inline: true },
-                { name: '🏷️ Role Granted', value: `<@&${VERIFIED_ROLE_ID}>`, inline: true }
+                { name: '🏷️ Role Granted', value: `<@&${roleIdToGrant}>`, inline: true }
               ],
               footer: { text: 'Zen2K Verification Engine • officialZen2K' }
             }],
@@ -856,7 +910,7 @@ async function processInteraction(interaction) {
       } catch (err) {
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '❌ **Verification Error:** Failed to assign role: ' + err.message + '\n*(Staff: ensure the bot role is dragged ABOVE the <@&' + VERIFIED_ROLE_ID + '> role in Discord Server Settings > Roles)*', flags: 64 }
+          data: { content: '❌ **Verification Error:** Failed to assign role: ' + err.message + '\n*(Staff: ensure the bot role is dragged ABOVE the <@&' + roleIdToGrant + '> role in Discord Server Settings > Roles)*', flags: 64 }
         };
       }
     }
@@ -1451,6 +1505,91 @@ async function processInteraction(interaction) {
         }
       }
     }
+
+    // --- /autorole (Auto-Role Manager) ---
+    if (name === 'autorole') {
+      if (!isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **Access Denied:** Only Zen2K staff can manage auto-roles.', flags: 64 }
+        };
+      }
+
+      const sub = options?.[0];
+      const subName = sub?.name;
+      const subOpts = sub?.options || [];
+
+      // /autorole set role:<role>
+      if (subName === 'set') {
+        const targetRoleId = subOpts.find(o => o.name === 'role')?.value;
+        if (!targetRoleId) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Please specify a role.', flags: 64 }
+          };
+        }
+
+        const autoDb = {
+          roleId: targetRoleId,
+          enabled: true,
+          setBy: user?.username || 'Staff',
+          setAt: new Date().toISOString()
+        };
+        await saveAutoroleDb(autoDb);
+
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [{
+              title: '⚙️ Zen2K Auto-Role Configured',
+              description: '>>> **Auto-Role configuration updated successfully!**\nMembers who verify or interact with the server will automatically receive this role.',
+              color: 0x00FFA3,
+              fields: [
+                { name: '🏷️ Designated Role', value: `<@&${targetRoleId}> (\`${targetRoleId}\`)`, inline: true },
+                { name: '⚡ Status', value: '`🟢 ACTIVE`', inline: true },
+                { name: '👤 Configured By', value: `<@${user.id}>`, inline: true }
+              ],
+              footer: { text: 'Zen2K Auto-Role Engine • officialZen2K' }
+            }]
+          }
+        };
+      }
+
+      // /autorole check
+      if (subName === 'check') {
+        const autoDb = await getAutoroleDb();
+        const activeRoleId = autoDb?.roleId || VERIFIED_ROLE_ID;
+        const isEnabled = autoDb?.enabled !== false;
+
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [{
+              title: '⚙️ Zen2K Auto-Role Status',
+              description: '>>> Current server auto-role settings overview:',
+              color: isEnabled ? 0x00FFA3 : 0xED4245,
+              fields: [
+                { name: '🏷️ Assigned Role', value: activeRoleId ? `<@&${activeRoleId}>` : '*None*', inline: true },
+                { name: '⚡ Status', value: isEnabled ? '`🟢 ACTIVE`' : '`🔴 DISABLED`', inline: true },
+                { name: '🕒 Last Updated', value: autoDb?.setAt ? `<t:${Math.floor(new Date(autoDb.setAt).getTime() / 1000)}:R>` : '*Default*', inline: true },
+                { name: '💡 Tip', value: 'Use `/autorole set role:@role` to change, or configure Discord Server Settings > Onboarding for zero-click instant join roles.', inline: false }
+              ],
+              footer: { text: 'Zen2K Auto-Role Engine • officialZen2K' }
+            }],
+            flags: 64
+          }
+        };
+      }
+
+      // /autorole remove
+      if (subName === 'remove') {
+        await saveAutoroleDb({ roleId: null, enabled: false, setBy: user?.username, setAt: new Date().toISOString() });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '🔴 **Auto-Role Disabled:** Automatic role assignment has been turned off.' }
+        };
+      }
+    }
   }
 
   // TYPE 3: MESSAGE COMPONENT
@@ -1460,7 +1599,8 @@ async function processInteraction(interaction) {
     // Verify Member Button
     if (custom_id.startsWith('btn_verify_member')) {
       const parts = custom_id.split(':');
-      const roleIdToGrant = parts[1] || VERIFIED_ROLE_ID;
+      const autoDb = await getAutoroleDb();
+      const roleIdToGrant = (parts[1] && parts[1] !== 'undefined') ? parts[1] : (autoDb?.roleId || VERIFIED_ROLE_ID);
 
       // 1. Check blacklist
       const isBlacklisted = await isMemberBlacklisted(guild_id, member);
