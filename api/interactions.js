@@ -39,6 +39,30 @@ function isStaff(member) {
   return false;
 }
 
+function parseColorHex(input) {
+  if (!input) return 0;
+  const named = {
+    gold: 0xFEE75C,
+    yellow: 0xFEE75C,
+    green: 0x57F287,
+    emerald: 0x00FFA3,
+    teal: 0x1ABC9C,
+    blue: 0x5865F2,
+    blurple: 0x5865F2,
+    red: 0xED4245,
+    purple: 0x9B59B6,
+    pink: 0xEB459E,
+    orange: 0xE67E22,
+    white: 0xFFFFFF,
+    black: 0x23272A,
+    cyan: 0x00E5FF
+  };
+  const clean = input.toLowerCase().trim().replace('#', '');
+  if (named[clean]) return named[clean];
+  const parsed = parseInt(clean, 16);
+  return isNaN(parsed) ? 0 : parsed;
+}
+
 async function getBlacklistDb() {
   if (blacklistCache && (Date.now() - blacklistCacheTime < 30000)) {
     return blacklistCache;
@@ -463,8 +487,8 @@ function buildProgressEmbed(ticketNum, clientTag, clientId, serviceName, tierNam
         inline: false
       },
       step === 4 ? {
-        name: '⭐ LEAVE A VOUCH / REVIEW',
-        value: '>>> 🌟 **Enjoyed our service?** Please click **[ ⭐ Leave a Vouch ]** below to share your feedback!\nYour review will be posted directly to <#' + VOUCHES_CHANNEL_ID + '>.\n\n🔒 You may now safely log back in and change your credentials.',
+        name: '⭐ LEAVE A VOUCH & WIN REWARDS',
+        value: '>>> 🌟 **Enjoyed our service?** Please click **[ ⭐ Leave a Vouch ]** below to share your feedback!\n🎰 **Loyalty Bonus:** Click **[ 🎰 Spin Reward Wheel ]** to win free bonus VC, discounts, or VIP roles!\nYour review will be posted directly to <#' + VOUCHES_CHANNEL_ID + '>.\n\n🔒 You may now safely log back in and change your credentials.',
         inline: false
       } : {
         name: '📋 CLIENT INSTRUCTIONS',
@@ -486,8 +510,14 @@ function buildProgressButtons(currentStep = 1) {
         type: 1,
         components: [
           { type: 2, style: 3, label: 'Leave a Vouch', custom_id: 'btn_modal_vouch', emoji: { name: '⭐' } },
-          { type: 2, style: 1, label: 'Save Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } },
+          { type: 2, style: 1, label: 'Spin Reward Wheel', custom_id: 'btn_spin_wheel', emoji: { name: '🎰' } },
           { type: 2, style: 4, label: 'Close Ticket', custom_id: 'btn_close_ticket', emoji: { name: '🔒' } }
+        ]
+      },
+      {
+        type: 1,
+        components: [
+          { type: 2, style: 2, label: 'Save Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } }
         ]
       }
     ];
@@ -963,6 +993,158 @@ async function processInteraction(interaction) {
         };
       }
     }
+
+    // --- /role (Role Maker & Management Engine) ---
+    if (name === 'role') {
+      if (!isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **Access Denied:** Only Zen2K staff and administrators can manage roles.', flags: 64 }
+        };
+      }
+
+      const sub = options?.[0];
+      const subName = sub?.name;
+      const subOpts = sub?.options || [];
+
+      // /role create name:<name> [color:<color>] [hoist:<bool>] [mentionable:<bool>]
+      if (subName === 'create') {
+        const rName = subOpts.find(o => o.name === 'name')?.value;
+        const rColorInput = subOpts.find(o => o.name === 'color')?.value || '';
+        const rHoist = subOpts.find(o => o.name === 'hoist')?.value || false;
+        const rMention = subOpts.find(o => o.name === 'mentionable')?.value || false;
+
+        const colorInt = parseColorHex(rColorInput);
+
+        try {
+          const createdRole = await discordFetch('/guilds/' + guild_id + '/roles', {
+            method: 'POST',
+            body: JSON.stringify({
+              name: rName,
+              color: colorInt,
+              hoist: rHoist,
+              mentionable: rMention
+            })
+          });
+
+          const hexDisplay = '#' + (colorInt ? colorInt.toString(16).padStart(6, '0').toUpperCase() : '000000');
+
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              embeds: [{
+                title: '✨ Role Created Successfully',
+                description: '>>> 🏷️ **Role Name:** <@&' + createdRole.id + '> (`' + createdRole.name + '`)\n' +
+                  '🆔 **Role ID:** `' + createdRole.id + '`\n' +
+                  '🎨 **Color:** `' + hexDisplay + '`\n' +
+                  '📌 **Hoisted in Sidebar:** `' + (rHoist ? 'Yes' : 'No') + '`\n' +
+                  '🔔 **Mentionable:** `' + (rMention ? 'Yes' : 'No') + '`',
+                color: colorInt || 0x57F287,
+                footer: { text: 'Zen2K Role Maker • Created by ' + user.username }
+              }]
+            }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to create role: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /role give user:<user> role:<role>
+      if (subName === 'give') {
+        const targetUserId = subOpts.find(o => o.name === 'user')?.value;
+        const targetRoleId = subOpts.find(o => o.name === 'role')?.value;
+
+        try {
+          await discordFetch('/guilds/' + guild_id + '/members/' + targetUserId + '/roles/' + targetRoleId, {
+            method: 'PUT'
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '✅ Successfully assigned <@&' + targetRoleId + '> to <@' + targetUserId + '>.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to assign role: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /role remove user:<user> role:<role>
+      if (subName === 'remove') {
+        const targetUserId = subOpts.find(o => o.name === 'user')?.value;
+        const targetRoleId = subOpts.find(o => o.name === 'role')?.value;
+
+        try {
+          await discordFetch('/guilds/' + guild_id + '/members/' + targetUserId + '/roles/' + targetRoleId, {
+            method: 'DELETE'
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '✅ Successfully removed <@&' + targetRoleId + '> from <@' + targetUserId + '>.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to remove role: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /role delete role:<role>
+      if (subName === 'delete') {
+        const targetRoleId = subOpts.find(o => o.name === 'role')?.value;
+
+        try {
+          await discordFetch('/guilds/' + guild_id + '/roles/' + targetRoleId, {
+            method: 'DELETE'
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '🗑️ Successfully deleted role `' + targetRoleId + '` from the server.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to delete role: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /role list
+      if (subName === 'list') {
+        try {
+          const roles = await discordFetch('/guilds/' + guild_id + '/roles');
+          const sorted = Array.isArray(roles) ? roles.filter(r => r.name !== '@everyone').sort((a, b) => b.position - a.position).slice(0, 25) : [];
+
+          const lines = sorted.map(r => {
+            const hex = '#' + (r.color ? r.color.toString(16).padStart(6, '0').toUpperCase() : '000000');
+            return `• <@&${r.id}> (\`${r.name}\`) — Color: \`${hex}\` | Pos: \`${r.position}\``;
+          });
+
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              embeds: [{
+                title: '🏷️ Server Roles Overview (' + sorted.length + ')',
+                description: lines.join('\n').slice(0, 4000),
+                color: 0x5865F2,
+                footer: { text: 'Zen2K Role Maker • officialZen2K' }
+              }],
+              flags: 64
+            }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to list roles: ' + err.message, flags: 64 }
+          };
+        }
+      }
+    }
   }
 
   // TYPE 3: MESSAGE COMPONENT
@@ -1003,6 +1185,141 @@ async function processInteraction(interaction) {
               ]
             }
           ]
+        }
+      };
+    }
+
+    // 🎰 SPIN ZEN2K REWARD WHEEL
+    if (custom_id === 'btn_spin_wheel') {
+      const ch = await discordFetch('/channels/' + channel_id).catch(() => ({}));
+      const chTopic = ch.topic || '';
+
+      if (chTopic.includes('[SPUN]')) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: '⚠️ **Wheel Already Spun:** This ticket has already redeemed its reward wheel spin! Thank you for choosing Zen2K.',
+            flags: 64
+          }
+        };
+      }
+
+      // Mark topic as spun to prevent double-spinning
+      const newTopic = (chTopic + ' [SPUN]').slice(0, 1024);
+      await discordFetch('/channels/' + channel_id, {
+        method: 'PATCH',
+        body: JSON.stringify({ topic: newTopic })
+      }).catch(() => {});
+
+      // Weighted prize generator
+      const roll = Math.floor(Math.random() * 100) + 1;
+      let prize = null;
+
+      if (roll <= 8) {
+        const code = 'JACKPOT-' + Math.floor(1000 + Math.random() * 9000);
+        prize = {
+          title: '💎 JACKPOT: +50,000 BONUS VC!',
+          desc: 'Highest reward on the wheel! 50,000 Bonus VC added to your next order.',
+          code: code,
+          color: 0x00FFA3,
+          tier: 'GRAND JACKPOT'
+        };
+      } else if (roll <= 35) {
+        const code = 'SPIN15-' + Math.floor(1000 + Math.random() * 9000);
+        prize = {
+          title: '🎟️ 15% OFF YOUR NEXT ORDER',
+          desc: '15% discount on any VC tier or service on your next ticket.',
+          code: code,
+          color: 0xFEE75C,
+          tier: 'GOLD REWARD'
+        };
+      } else if (roll <= 65) {
+        const code = 'RUSH-' + Math.floor(1000 + Math.random() * 9000);
+        prize = {
+          title: '⚡ FREE VIP RUSH DELIVERY UPGRADE',
+          desc: 'Skip straight to the front of our delivery queue on your next order for $0.',
+          code: code,
+          color: 0x5865F2,
+          tier: 'PRIORITY UPGRADE'
+        };
+      } else if (roll <= 85) {
+        const code = 'ZEN5-' + Math.floor(1000 + Math.random() * 9000);
+        prize = {
+          title: '💵 $5 STORE CREDIT',
+          desc: 'Enjoy $5 off any order above $25 on your next visit.',
+          code: code,
+          color: 0x57F287,
+          tier: 'CASH CREDIT'
+        };
+      } else {
+        prize = {
+          title: '👑 ZEN2K LUCKY VIP STATUS',
+          desc: 'Granted the exclusive Lucky Spinner badge role and VIP perks!',
+          code: 'ROLE-GRANTED',
+          color: 0xEB459E,
+          tier: 'VIP STATUS'
+        };
+
+        try {
+          const roles = await discordFetch('/guilds/' + guild_id + '/roles').catch(() => []);
+          let spinnerRole = Array.isArray(roles) ? roles.find(r => r.name.toLowerCase().includes('lucky spinner') || r.name.toLowerCase().includes('zen2k lucky')) : null;
+          if (!spinnerRole) {
+            spinnerRole = await discordFetch('/guilds/' + guild_id + '/roles', {
+              method: 'POST',
+              body: JSON.stringify({
+                name: '🎰 Zen2K Lucky Spinner',
+                color: 0xEB459E,
+                mentionable: false
+              })
+            });
+          }
+          if (spinnerRole?.id) {
+            await discordFetch('/guilds/' + guild_id + '/members/' + user.id + '/roles/' + spinnerRole.id, {
+              method: 'PUT'
+            }).catch(() => {});
+          }
+        } catch (_) {}
+      }
+
+      const wheelEmbed = {
+        title: '🎰 ZEN2K REWARD WHEEL • ' + prize.tier,
+        description: '>>> 🎉 **Congratulations <@' + user.id + '>! The wheel stopped on:**\n\n' +
+          '🏆 **' + prize.title + '**\n' +
+          '📋 ' + prize.desc + '\n\n' +
+          '🏷️ **Claim Code:** `' + prize.code + '`\n\n' +
+          '*Show this code to staff in your next ticket to redeem your prize!*',
+        color: prize.color,
+        footer: { text: 'Zen2K Customer Loyalty Rewards • officialZen2K' }
+      };
+
+      await discordFetch('/channels/' + channel_id + '/messages', {
+        method: 'POST',
+        body: JSON.stringify({
+          content: '🎉 <@' + user.id + '> just spun the **Zen2K Reward Wheel**!',
+          embeds: [wheelEmbed]
+        })
+      });
+
+      discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages', {
+        method: 'POST',
+        body: JSON.stringify({
+          embeds: [{
+            title: '🎰 WHEEL REWARD WON • #' + (ch.name || channel_id),
+            description: '>>> 👤 **Winner:** <@' + user.id + '> (`' + user.username + '`)\n' +
+              '🎁 **Reward:** `' + prize.title + '`\n' +
+              '🏷️ **Code:** `' + prize.code + '`\n' +
+              '🕒 **Timestamp:** <t:' + Math.floor(Date.now() / 1000) + ':F>',
+            color: prize.color,
+            footer: { text: 'Zen2K Audit Vault • officialZen2K' }
+          }]
+        })
+      }).catch(() => {});
+
+      return {
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          content: '🎰 **You spun the wheel!** Check out your reward card in the chat above.',
+          flags: 64
         }
       };
     }
@@ -1270,8 +1587,14 @@ async function processInteraction(interaction) {
             type: 1,
             components: [
               { type: 2, style: 3, label: 'Leave a Vouch', custom_id: 'btn_modal_vouch', emoji: { name: '⭐' } },
-              { type: 2, style: 1, label: 'Save Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } },
+              { type: 2, style: 1, label: 'Spin Reward Wheel', custom_id: 'btn_spin_wheel', emoji: { name: '🎰' } },
               { type: 2, style: 4, label: 'Close Ticket', custom_id: 'btn_close_ticket', emoji: { name: '🔒' } }
+            ]
+          },
+          {
+            type: 1,
+            components: [
+              { type: 2, style: 2, label: 'Save Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } }
             ]
           }
         ];
