@@ -275,13 +275,30 @@ async function runRegistration() {
     }
   ];
 
-  const target = guildId ? ('guild ' + guildId) : 'Global Discord API';
-  const url = guildId
-    ? (DISCORD_API + '/applications/' + appId + '/guilds/' + guildId + '/commands')
-    : (DISCORD_API + '/applications/' + appId + '/commands');
-
   try {
-    const res = await fetch(url, {
+    // 1. Register to all joined Guilds for INSTANT zero-delay sync in Discord client
+    const guildsRes = await fetch(DISCORD_API + '/users/@me/guilds', {
+      headers: { 'Authorization': 'Bot ' + token }
+    });
+    const guildSyncResults = [];
+    if (guildsRes.ok) {
+      const guilds = await guildsRes.json().catch(() => []);
+      for (const g of guilds) {
+        const gRes = await fetch(DISCORD_API + '/applications/' + appId + '/guilds/' + g.id + '/commands', {
+          method: 'PUT',
+          headers: {
+            'Authorization': 'Bot ' + token,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(commands)
+        });
+        guildSyncResults.push(g.name + ' (' + g.id + '): ' + gRes.status);
+      }
+    }
+
+    // 2. Register to Global Discord API
+    const globalUrl = DISCORD_API + '/applications/' + appId + '/commands';
+    const res = await fetch(globalUrl, {
       method: 'PUT',
       headers: {
         'Authorization': 'Bot ' + token,
@@ -300,7 +317,8 @@ async function runRegistration() {
       status: 200,
       data: {
         success: true,
-        message: 'Successfully registered ' + data.length + ' slash commands to ' + target + '!',
+        message: 'Successfully registered ' + data.length + ' slash commands globally and to ' + guildSyncResults.length + ' guild(s)!',
+        guilds: guildSyncResults,
         commands: data.map(c => '/' + c.name)
       }
     };
