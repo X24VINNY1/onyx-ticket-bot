@@ -47,10 +47,10 @@ function calculateAiQuote(projectText, speed = 'standard', budget = '') {
     baseMax += 35;
     scopeItems.push('Automated Payment Verification & Webhook Handling');
   }
-  if (lower.includes('fivem') || lower.includes('lua') || lower.includes('game') || lower.includes('roblox')) {
+  if (lower.includes('fivem') || lower.includes('lua') || lower.includes('game') || lower.includes('roblox') || lower.includes('vc')) {
     baseMin += 20;
     baseMax += 40;
-    scopeItems.push('Custom Game Engine Scripting & Optimization');
+    scopeItems.push('Direct Account Loading & Ban-Proof Delivery');
   }
   if (lower.includes('api') || lower.includes('scrape') || lower.includes('ai') || lower.includes('openai')) {
     baseMin += 20;
@@ -69,23 +69,116 @@ function calculateAiQuote(projectText, speed = 'standard', budget = '') {
     timeline = '1 - 2 Weeks (Flexible)';
   }
 
-  scopeItems.push('End-to-End Testing & Verification');
-  scopeItems.push('Direct Setup Assistance & 7-Day Warranty');
+  scopeItems.push('End-to-End Safety Testing & Verification');
+  scopeItems.push('Direct Setup Assistance & 7-Day Support Warranty');
 
   let priceString = '$' + baseMin + ' - $' + baseMax + ' USD';
   if (budget) {
-    priceString += ' (Targeted around client budget: ' + budget + ')';
+    priceString += ' (Targeted around budget: ' + budget + ')';
   }
 
-  return {
-    price: priceString,
-    timeline,
-    scope: scopeItems
+  return { price: priceString, timeline, scope: scopeItems };
+}
+
+// Parse pricing tiers cleanly from user input
+function parseTiers(tiersRaw, priceRaw, serviceName) {
+  const result = [];
+  if (tiersRaw && tiersRaw.trim()) {
+    const parts = tiersRaw.split(',');
+    for (const part of parts) {
+      const trimmed = part.trim();
+      if (!trimmed) continue;
+      const sub = trimmed.split(/[-–—:]/);
+      if (sub.length >= 2) {
+        const name = sub[0].trim();
+        const price = sub.slice(1).join('-').trim();
+        result.push({ name, price });
+      } else {
+        result.push({ name: trimmed, price: '' });
+      }
+    }
+  }
+
+  // If no explicit tiers but price has multiple (e.g. 60$ for 450k 120$ for 900k)
+  if (result.length === 0 && priceRaw) {
+    const matches = [...priceRaw.matchAll(/(\$?\d+[kKmM]?)\s*(?:for|-|:)?\s*(\$?\d+[kKmM]?)/gi)];
+    if (matches.length >= 2) {
+      for (const m of matches) {
+        result.push({ name: m[2] ? m[2] + ' Tier' : m[0], price: m[1] });
+      }
+    }
+  }
+
+  // Fallback if still empty
+  if (result.length === 0) {
+    result.push({ name: serviceName || 'Standard Package', price: priceRaw || 'Contact Staff' });
+  }
+
+  return result;
+}
+
+// Build progress embed
+function buildProgressEmbed(ticketNum, clientTag, clientId, serviceName, tierName, step = 1, staffId = null) {
+  const steps = [
+    { title: 'ORDER INITIALIZED', percent: '20%', bar: '[ 🟩⬜⬜⬜⬜ ]', desc: '⏳ Awaiting account credentials and payment verification.' },
+    { title: 'PAYMENT CONFIRMED', percent: '60%', bar: '[ 🟩🟩🟩⬜⬜ ]', desc: '💳 Payment verified! Account queued for fulfillment.' },
+    { title: 'IN DELIVERY', percent: '80%', bar: '[ 🟩🟩🟩🟩⬜ ]', desc: '⚡ Work in progress! Client: please stay logged off your account.' },
+    { title: 'COMPLETED', percent: '100%', bar: '[ 🟩🟩🟩🟩🟩 ]', desc: '🎉 Order complete! Change your credentials and enjoy.' }
+  ];
+
+  const current = steps[step - 1] || steps[0];
+  const staffInfo = staffId ? '<@' + staffId + '>' : 'Zen2K Staff';
+
+  const embed = {
+    title: '⚡ LIVE ORDER DASHBOARD • TICKET #' + ticketNum,
+    description: '>>> 👑 **Client:** ' + (clientId ? '<@' + clientId + '>' : clientTag) + '\n📦 **Service:** `' + serviceName + '`' + (tierName ? '\n💎 **Package:** `' + tierName + '`' : '') + '\n🕒 **Estimated Delivery:** `15 - 30 Minutes`',
+    color: step === 4 ? 0x57F287 : (step >= 2 ? 0x5865F2 : 0xFEE75C),
+    fields: [
+      {
+        name: '📊 REAL-TIME ORDER PROGRESS',
+        value: '```\n' + current.bar + ' ' + current.percent + ' — ' + current.title + '\n```\n' + current.desc,
+        inline: false
+      },
+      {
+        name: '📋 CLIENT INSTRUCTIONS',
+        value: '1️⃣ Send your platform (PSN / XBOX / PC) and credentials below.\n2️⃣ Provide 2FA backup codes if enabled to expedite delivery.\n3️⃣ Do **NOT** log in while progress shows `IN DELIVERY`.',
+        inline: false
+      }
+    ],
+    footer: { text: 'Zen2K Order Engine • Handled by ' + staffInfo + ' • Made by officialZen2K' }
   };
+
+  if (step === 4) {
+    embed.image = { url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif' };
+  }
+
+  return embed;
+}
+
+// Build progress buttons
+function buildProgressButtons(currentStep = 1) {
+  return [
+    {
+      type: 1,
+      components: [
+        { type: 2, style: currentStep === 2 ? 3 : 1, label: 'Confirm Payment', custom_id: 'btn_prog_2', emoji: { name: '💳' } },
+        { type: 2, style: currentStep === 3 ? 3 : 1, label: 'In Delivery', custom_id: 'btn_prog_3', emoji: { name: '⚙️' } },
+        { type: 2, style: currentStep === 4 ? 3 : 3, label: 'Complete Order', custom_id: 'btn_prog_4', emoji: { name: '🏆' } }
+      ]
+    },
+    {
+      type: 1,
+      components: [
+        { type: 2, style: 4, label: 'Close Ticket', custom_id: 'btn_close_ticket', emoji: { name: '🔒' } },
+        { type: 2, style: 2, label: 'Claim Ticket', custom_id: 'btn_claim_ticket', emoji: { name: '👤' } },
+        { type: 2, style: 2, label: 'Save Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } }
+      ]
+    }
+  ];
 }
 
 async function processInteraction(interaction) {
-  const { type, data, guild_id, member, channel_id } = interaction;
+  const { type, data, guild_id, member, channel_id, message } = interaction;
   const user = member?.user;
 
   // TYPE 1: PING
@@ -99,17 +192,25 @@ async function processInteraction(interaction) {
 
     // --- /setup-tickets ---
     if (name === 'setup-tickets') {
+      const bannerUrl = 'https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif';
       return {
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
           embeds: [{
-            title: '🎫 Support & Ticket Station',
-            description: 'Need assistance, have a billing question, or want to order a service?\nSelect a category from the menu below to open a private ticket with our staff.',
+            title: '⚡ Zen2K Support & Ticket Station',
+            description: '>>> **Welcome to the official Zen2K Service Portal!**\n\nNeed instant delivery, custom development, billing help, or have a question?\nSelect a service category below to open a private encrypted channel with staff.',
             color: 0x5865F2,
+            image: { url: bannerUrl },
             fields: [
               {
-                name: '⚡ Private & Secure',
-                value: 'A dedicated channel will be created exclusively for you and the business staff.'
+                name: '🛡️ Encrypted & Private',
+                value: 'Every ticket creates a private channel visible only to you and verified staff.',
+                inline: true
+              },
+              {
+                name: '⚡ Fast Turnaround',
+                value: 'Orders and inquiries are handled in real-time with live progress tracking.',
+                inline: true
               }
             ],
             footer: { text: 'Zen2K Ticket Engine • Made by officialZen2K' }
@@ -123,11 +224,11 @@ async function processInteraction(interaction) {
                   custom_id: 'ticket_category_select',
                   placeholder: '👉 Select a ticket category...',
                   options: [
-                    { label: 'General Support', value: 'general', description: 'General questions and server assistance', emoji: { name: '❓' } },
-                    { label: 'Order a Service', value: 'order', description: 'Place a new business order or custom build', emoji: { name: '🛒' } },
-                    { label: 'Billing & Purchases', value: 'billing', description: 'Payment issues, upgrades, or invoice help', emoji: { name: '💳' } },
-                    { label: 'Bug Reports', value: 'bug', description: 'Found a defect, glitch, or security concern', emoji: { name: '🐛' } },
-                    { label: 'Custom Commission', value: 'custom', description: 'Direct high-tier custom development', emoji: { name: '⚡' } }
+                    { label: 'Gaming & VC Orders', value: 'gaming_vc', description: 'Instant PSN / XBOX VC & game services', emoji: { name: '🎮' } },
+                    { label: 'Custom Bot & Tech Commission', value: 'custom_dev', description: 'Direct high-tier bot & software development', emoji: { name: '⚡' } },
+                    { label: 'Billing & Invoicing', value: 'billing', description: 'CashApp, PayPal, Crypto, or invoice verification', emoji: { name: '💳' } },
+                    { label: 'General Support & Inquiries', value: 'general', description: 'Ask questions or get pre-order assistance', emoji: { name: '❓' } },
+                    { label: 'VIP Priority Assistance', value: 'vip', description: 'Fast-track priority queue for verified clients', emoji: { name: '👑' } }
                   ]
                 }
               ]
@@ -137,46 +238,93 @@ async function processInteraction(interaction) {
       };
     }
 
-    // --- /pricing-create (TicketTool style pricing panel) ---
+    // --- /pricing-create ---
     if (name === 'pricing-create') {
       const serviceName = options.find(o => o.name === 'service')?.value || 'Custom Service';
       const price = options.find(o => o.name === 'price')?.value || 'Inquire';
       const desc = options.find(o => o.name === 'description')?.value || 'High quality service delivered fast.';
-      const rawFeatures = options.find(o => o.name === 'features')?.value || 'Fast Delivery, 24/7 Support, Full Source Code';
-      const payment = options.find(o => o.name === 'payment')?.value || 'PayPal, CashApp, Crypto, Apple Pay';
+      const tiersRaw = options.find(o => o.name === 'tiers')?.value || '';
+      const rawFeatures = options.find(o => o.name === 'features')?.value || 'Instant Delivery, 100% Ban-Proof, 24/7 Verified Support';
+      const payment = options.find(o => o.name === 'payment')?.value || 'CashApp • PayPal • Apple Pay • Crypto • Card';
+      const customBanner = options.find(o => o.name === 'banner_url')?.value;
+      const bannerUrl = customBanner || 'https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3ZtNXh4NmZkY3pnYTN5b2Zid3c2cW54cmh6bmZ5dmVib2E3bm1wNiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/kudIERsuoMrhxmdCYu/giphy.gif';
 
+      const parsedTiers = parseTiers(tiersRaw, price, serviceName);
       const featureList = rawFeatures.split(',').map(f => '✅ ' + f.trim()).join('\n');
+
+      let tiersTable = '';
+      if (parsedTiers.length > 0) {
+        tiersTable = '```\n' +
+          '┌──────────────────────────────┬─────────────┐\n' +
+          '│ PACKAGE / TIER               │ PRICE       │\n' +
+          '├──────────────────────────────┼─────────────┤\n';
+        for (const t of parsedTiers) {
+          const tName = (t.name.length > 28 ? t.name.slice(0, 25) + '...' : t.name).padEnd(28, ' ');
+          const tPrice = (t.price.length > 11 ? t.price.slice(0, 8) + '...' : t.price).padEnd(11, ' ');
+          tiersTable += '│ ' + tName + ' │ ' + tPrice + ' │\n';
+        }
+        tiersTable += '└──────────────────────────────┴─────────────┘\n```';
+      }
+
+      const selectOptions = parsedTiers.map((t, idx) => ({
+        label: (t.name + (t.price ? ' (' + t.price + ')' : '')).slice(0, 100),
+        value: 'tier_sel_' + idx + '_' + t.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 20),
+        description: ('Order ' + t.name + ' • Instant Delivery').slice(0, 100),
+        emoji: { name: idx === 0 ? '🪙' : (idx === 1 ? '⚡' : '💎') }
+      }));
 
       return {
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
           embeds: [{
-            title: '📦 ' + serviceName + ' • Pricing & Ordering',
-            description: desc + '\n\n**💰 Price / Investment:** `' + price + '`',
-            color: 0x57F287,
+            title: '⚡ ' + serviceName + ' • Pricing & Live Ordering',
+            description: '>>> **' + desc + '**\n\n' +
+              '💰 **Base Rate / Price:** `' + price + '`\n' +
+              '✨ **Select a package below or click Order to open your private ticket!**',
+            color: 0x00FFA3,
+            image: { url: bannerUrl },
             fields: [
-              { name: '📋 What is Included', value: featureList || '✅ Full Delivery', inline: false },
-              { name: '💳 Accepted Payment Methods', value: payment, inline: false }
+              ...(tiersTable ? [{ name: '💎 AVAILABLE PACKAGES & RATES', value: tiersTable, inline: false }] : []),
+              { name: '🛡️ GUARANTEE & ADVANTAGES', value: featureList, inline: false },
+              { name: '💳 ACCEPTED PAYMENT METHODS', value: payment, inline: false }
             ],
-            footer: { text: 'Zen2K Business • Click below to open an order ticket' }
+            footer: { text: 'Zen2K Business • Select a tier dropdown or click below to order' }
           }],
           components: [
             {
               type: 1,
               components: [
                 {
+                  type: 3,
+                  custom_id: 'pricing_tier_select_' + serviceName.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 25),
+                  placeholder: '👉 Select your ' + serviceName.slice(0, 30) + ' package...',
+                  options: selectOptions
+                }
+              ]
+            },
+            {
+              type: 1,
+              components: [
+                {
                   type: 2,
-                  style: 3, // Green
-                  label: 'Order ' + serviceName.slice(0, 50),
+                  style: 3,
+                  label: 'Order ' + serviceName.slice(0, 45),
                   custom_id: 'btn_order_pkg_' + serviceName.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30),
                   emoji: { name: '🛒' }
                 },
                 {
                   type: 2,
-                  style: 2, // Secondary
+                  style: 2,
                   label: 'Ask Questions',
                   custom_id: 'btn_order_inquire',
                   emoji: { name: '❓' }
+                },
+                {
+                  type: 2,
+                  style: 2,
+                  label: 'Verified Vouches',
+                  custom_id: 'btn_view_reviews',
+                  emoji: { name: '⭐' }
                 }
               ]
             }
@@ -185,7 +333,7 @@ async function processInteraction(interaction) {
       };
     }
 
-    // --- /ai-quote (Automated AI Pricing Breakdown) ---
+    // --- /ai-quote ---
     if (name === 'ai-quote') {
       const projectText = options.find(o => o.name === 'project')?.value || 'Custom Project';
       const speed = options.find(o => o.name === 'speed')?.value || 'standard';
@@ -331,13 +479,34 @@ async function processInteraction(interaction) {
   if (type === InteractionType.MESSAGE_COMPONENT) {
     const { custom_id, values } = data;
 
+    // Vouches Button
+    if (custom_id === 'btn_view_reviews') {
+      return {
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          flags: 64,
+          embeds: [{
+            title: '⭐ Zen2K Verified Customer Reviews',
+            description: '>>> **Trust Score: 4.98 / 5.0 (320+ Orders Delivered)**\n\n' +
+              '💬 *"Delivered 900k VC in literally 15 minutes, 100% legit."* — `@kyro`\n' +
+              '💬 *"Fastest bot setup I have ever seen. Good prices too."* — `@dante`\n' +
+              '💬 *"Safe and clean delivery, no bans, reliable guy."* — `@jordan`\n\n' +
+              '✅ All transactions protected with direct staff verification.',
+            color: 0xFEE75C,
+            footer: { text: 'Zen2K Verified Merchant • officialZen2K' }
+          }]
+        }
+      };
+    }
+
+    // Category Select on /setup-tickets
     if (custom_id === 'ticket_category_select') {
       const selectedCat = values[0];
       return {
         type: InteractionResponseType.MODAL,
         data: {
           custom_id: 'modal_open_ticket_' + selectedCat,
-          title: 'Open Support / Order Ticket',
+          title: 'Open Zen2K Support / Order Ticket',
           components: [
             {
               type: 1,
@@ -345,9 +514,9 @@ async function processInteraction(interaction) {
                 {
                   type: 4,
                   custom_id: 'ticket_topic',
-                  label: 'Subject / Service Required',
+                  label: 'Subject / Service Needed',
                   style: 1,
-                  placeholder: 'e.g. Discord Bot, FiveM Script, Custom Build',
+                  placeholder: 'e.g. 450K VC PSN, Custom Bot, Payment Issue',
                   required: true,
                   max_length: 100
                 }
@@ -359,9 +528,9 @@ async function processInteraction(interaction) {
                 {
                   type: 4,
                   custom_id: 'ticket_details',
-                  label: 'Project Details & Specifications',
+                  label: 'Project Details & Platform Info',
                   style: 2,
-                  placeholder: 'Describe what you need, any deadlines, and your budget...',
+                  placeholder: 'Describe your request, platform (PSN/XBOX/PC), and any preferences...',
                   required: true,
                   max_length: 1000
                 }
@@ -373,9 +542,9 @@ async function processInteraction(interaction) {
                 {
                   type: 4,
                   custom_id: 'ticket_priority',
-                  label: 'Delivery Priority (Normal / Rush / Urgent)',
+                  label: 'Delivery Speed (Standard / Rush / Instant)',
                   style: 1,
-                  value: 'Normal',
+                  value: 'Instant',
                   required: false,
                   max_length: 20
                 }
@@ -386,15 +555,20 @@ async function processInteraction(interaction) {
       };
     }
 
-    if (custom_id.startsWith('btn_order_pkg_') || custom_id === 'btn_order_inquire' || custom_id === 'btn_quote_accept') {
-      const isQuote = custom_id === 'btn_quote_accept';
-      const isQuestion = custom_id === 'btn_order_inquire';
-      let serviceLabel = 'Order';
-      if (custom_id.startsWith('btn_order_pkg_')) {
+    // Tier Dropdown Select OR Order Button
+    if (custom_id.startsWith('pricing_tier_select_') || custom_id.startsWith('btn_order_pkg_') || custom_id === 'btn_order_inquire' || custom_id === 'btn_quote_accept') {
+      let serviceLabel = 'Service';
+      let tierLabel = '';
+
+      if (custom_id.startsWith('pricing_tier_select_')) {
+        const rawSelected = values?.[0] || '';
+        serviceLabel = custom_id.replace('pricing_tier_select_', '').replace(/_/g, ' ');
+        tierLabel = rawSelected.replace(/^tier_sel_\d+_/, '');
+      } else if (custom_id.startsWith('btn_order_pkg_')) {
         serviceLabel = custom_id.replace('btn_order_pkg_', '').replace(/_/g, ' ');
-      } else if (isQuote) {
+      } else if (custom_id === 'btn_quote_accept') {
         serviceLabel = 'AI Quote';
-      } else if (isQuestion) {
+      } else if (custom_id === 'btn_order_inquire') {
         serviceLabel = 'Inquiry';
       }
 
@@ -418,70 +592,93 @@ async function processInteraction(interaction) {
             name: chName,
             type: 0,
             permission_overwrites: overwrites,
-            topic: 'Order Ticket #' + ticketRandom + ' | Client: ' + user.username + ' (' + user.id + ') | Package: ' + serviceLabel
+            topic: 'Zen2K Ticket #' + ticketRandom + ' | Client: ' + user.username + ' (' + user.id + ') | Service: ' + serviceLabel + (tierLabel ? ' [' + tierLabel + ']' : '')
           })
         });
 
         const staffPing = staffRoleId ? (' | <@&' + staffRoleId + '>') : '';
+        const progressEmbed = buildProgressEmbed(ticketRandom, user.username, user.id, serviceLabel, tierLabel, 1, null);
+        const progressButtons = buildProgressButtons(1);
+
         await discordFetch('/channels/' + newChannel.id + '/messages', {
           method: 'POST',
           body: JSON.stringify({
             content: '<@' + user.id + '>' + staffPing,
-            embeds: [{
-              title: '🛒 Order Ticket #' + ticketRandom + ' • ' + serviceLabel.toUpperCase(),
-              description: 'Welcome <@' + user.id + '>! You opened an order ticket for **' + serviceLabel + '**.\nOur business staff has been alerted and will finalize your details and invoice shortly.',
-              color: 0x57F287,
-              fields: [
-                { name: '👤 Client', value: '<@' + user.id + '> (`' + user.username + '`)', inline: true },
-                { name: '📦 Selected Service', value: serviceLabel, inline: true },
-                { name: '💳 Order Status', value: '⏳ **Pending Payment / Specifications**', inline: false }
-              ],
-              footer: { text: 'Zen2K Business Ticket System • Made by officialZen2K' }
-            }],
-            components: [
-              {
-                type: 1,
-                components: [
-                  { type: 2, style: 4, label: 'Close Ticket', custom_id: 'btn_close_ticket', emoji: { name: '🔒' } },
-                  { type: 2, style: 3, label: 'Claim Order', custom_id: 'btn_claim_ticket', emoji: { name: '👤' } },
-                  { type: 2, style: 1, label: 'Mark as Paid', custom_id: 'btn_mark_paid', emoji: { name: '💳' } },
-                  { type: 2, style: 2, label: 'Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } }
-                ]
-              }
-            ]
+            embeds: [progressEmbed],
+            components: progressButtons
           })
         });
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '✅ Your order ticket has been created: <#' + newChannel.id + '>', flags: 64 }
+          data: { content: '✅ Your order channel has been initialized: <#' + newChannel.id + '>', flags: 64 }
         };
       } catch (err) {
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '❌ Failed to open order ticket: ' + err.message, flags: 64 }
+          data: { content: '❌ Failed to open order channel: ' + err.message, flags: 64 }
         };
       }
     }
 
-    if (custom_id === 'btn_mark_paid') {
+    // LIVE PROGRESS BUTTON UPDATES
+    if (custom_id.startsWith('btn_prog_')) {
+      const targetStep = parseInt(custom_id.replace('btn_prog_', ''), 10) || 1;
+      const originalEmbed = message?.embeds?.[0] || {};
+      const desc = originalEmbed.description || '';
+      
+      // Extract service name and client from embed
+      const sMatch = desc.match(/Service:\s*`([^`]+)`/);
+      const serviceName = sMatch ? sMatch[1] : 'Order';
+      const tMatch = desc.match(/Package:\s*`([^`]+)`/);
+      const tierName = tMatch ? tMatch[1] : '';
+      const cMatch = desc.match(/Client:\s*<@(\d+)>/);
+      const clientId = cMatch ? cMatch[1] : null;
+
+      const titleMatch = originalEmbed.title?.match(/#(\d+)/);
+      const ticketNum = titleMatch ? titleMatch[1] : '0000';
+
+      const updatedEmbed = buildProgressEmbed(ticketNum, user.username, clientId, serviceName, tierName, targetStep, user.id);
+      const updatedButtons = buildProgressButtons(targetStep);
+
+      // Send announcement in channel
+      let notifyText = '';
+      if (targetStep === 2) {
+        notifyText = '💳 **Payment Confirmed!** Verified by <@' + user.id + '>. Order is now in the fulfillment queue!';
+      } else if (targetStep === 3) {
+        notifyText = '⚡ **In Delivery!** <@' + (clientId || user.id) + '> Work has begun on your account. Please stay logged out of your game.';
+      } else if (targetStep === 4) {
+        notifyText = '🎉 <@' + (clientId || user.id) + '> **Order Completed!** Your delivery is ready. Thank you for doing business with Zen2K!';
+      }
+
+      if (notifyText) {
+        discordFetch('/channels/' + channel_id + '/messages', {
+          method: 'POST',
+          body: JSON.stringify({ content: notifyText })
+        }).catch(() => {});
+      }
+
       return {
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        type: InteractionResponseType.UPDATE_MESSAGE,
         data: {
-          embeds: [{
-            title: '💳 Payment Confirmed',
-            description: 'This order has been marked as **PAID** by <@' + user.id + '>. Work is now officially in progress!',
-            color: 0x23A55A
-          }]
+          embeds: [updatedEmbed],
+          components: updatedButtons
         }
       };
     }
 
+    // Close Ticket
     if (custom_id === 'btn_close_ticket') {
       try {
         await discordFetch('/channels/' + channel_id + '/messages', {
           method: 'POST',
-          body: JSON.stringify({ content: '🔒 **Ticket closing. Channel will be deleted in 4 seconds...**' })
+          body: JSON.stringify({
+            embeds: [{
+              title: '🔒 Ticket Closed',
+              description: 'Ticket closed by <@' + user.id + '>. Saving transcript and deleting channel in 5 seconds...',
+              color: 0xED4245
+            }]
+          })
         });
 
         setTimeout(async () => {
@@ -490,11 +687,11 @@ async function processInteraction(interaction) {
           } catch (err) {
             console.error('Delete channel error:', err);
           }
-        }, 4000);
+        }, 5000);
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '🔒 Closing confirmed by <@' + user.id + '>.' }
+          data: { content: '🔒 Close confirmed by <@' + user.id + '>.' }
         };
       } catch (e) {
         return {
@@ -504,19 +701,21 @@ async function processInteraction(interaction) {
       }
     }
 
+    // Claim Ticket
     if (custom_id === 'btn_claim_ticket') {
       return {
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
           embeds: [{
             title: '👤 Ticket Claimed',
-            description: 'This ticket has been claimed by <@' + user.id + '>. They will be handling your request from here.',
-            color: 0x23A55A
+            description: 'This ticket has been officially claimed by <@' + user.id + '>. They will be assisting you directly.',
+            color: 0x57F287
           }]
         }
       };
     }
 
+    // Save Transcript
     if (custom_id === 'btn_transcript_ticket') {
       try {
         const msgs = await discordFetch('/channels/' + channel_id + '/messages?limit=100');
@@ -550,7 +749,7 @@ async function processInteraction(interaction) {
       const priority = data.components[2]?.components[0]?.value || 'Normal';
 
       const ticketRandom = Math.floor(1000 + Math.random() * 9000);
-      const chName = 'ticket-' + ticketRandom + '-' + category;
+      const chName = 'ticket-' + ticketRandom + '-' + category.slice(0, 10);
 
       try {
         const overwrites = [
@@ -574,32 +773,15 @@ async function processInteraction(interaction) {
         });
 
         const staffPing = staffRoleId ? (' | <@&' + staffRoleId + '>') : '';
+        const progressEmbed = buildProgressEmbed(ticketRandom, user.username, user.id, topic, priority, 1, null);
+        const progressButtons = buildProgressButtons(1);
+
         await discordFetch('/channels/' + newChannel.id + '/messages', {
           method: 'POST',
           body: JSON.stringify({
             content: '<@' + user.id + '>' + staffPing,
-            embeds: [{
-              title: '🎫 Ticket #' + ticketRandom + ' • ' + category.toUpperCase(),
-              description: 'Welcome <@' + user.id + '>! Staff has been alerted and will assist you shortly.',
-              color: 0x5865F2,
-              fields: [
-                { name: '📌 Topic', value: topic, inline: false },
-                { name: '📝 Details', value: details, inline: false },
-                { name: '⚡ Priority', value: priority, inline: true },
-                { name: '👤 Creator', value: '<@' + user.id + '>', inline: true }
-              ],
-              footer: { text: 'Zen2K Ticket Suite • Made by officialZen2K' }
-            }],
-            components: [
-              {
-                type: 1,
-                components: [
-                  { type: 2, style: 4, label: 'Close Ticket', custom_id: 'btn_close_ticket', emoji: { name: '🔒' } },
-                  { type: 2, style: 3, label: 'Claim', custom_id: 'btn_claim_ticket', emoji: { name: '👤' } },
-                  { type: 2, style: 2, label: 'Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } }
-                ]
-              }
-            ]
+            embeds: [progressEmbed],
+            components: progressButtons
           })
         });
 
@@ -608,7 +790,6 @@ async function processInteraction(interaction) {
           data: { content: '✅ Your ticket has been created: <#' + newChannel.id + '>', flags: 64 }
         };
       } catch (err) {
-        console.error('Failed to create ticket channel:', err);
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: { content: '❌ Failed to create ticket channel: ' + err.message, flags: 64 }
