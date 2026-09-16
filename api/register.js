@@ -195,13 +195,49 @@ async function runRegistration() {
       options: [
         {
           name: 'create',
-          description: 'Create a custom role with custom color, hoist, and permissions',
+          description: 'Create a custom role with color, permissions, and options',
           type: 1,
           options: [
-            { name: 'name', description: 'Name of the new role (e.g. VIP, Customer, Mod)', type: 3, required: true },
+            { name: 'name', description: 'Name of the new role (e.g. VIP, Moderator, Support)', type: 3, required: true },
             { name: 'color', description: 'Color hex or name (e.g. #00FFA3, gold, red, blue, purple)', type: 3, required: false },
+            {
+              name: 'permissions',
+              description: 'Permission level preset for this role',
+              type: 3,
+              required: false,
+              choices: [
+                { name: '👑 Admin (Full Administrator)', value: 'admin' },
+                { name: '🛡️ Moderator (Kick, Ban, Mute, Delete Messages)', value: 'mod' },
+                { name: '⚡ Support Staff (Manage Messages, Attach Files)', value: 'support' },
+                { name: '👤 Verified Member / Customer (Standard Chat)', value: 'member' },
+                { name: '👁️ Read Only (View Channels Only)', value: 'readonly' },
+                { name: '⛔ None (0 Permissions)', value: 'none' }
+              ]
+            },
             { name: 'hoist', description: 'Display separately on member sidebar', type: 5, required: false },
             { name: 'mentionable', description: 'Allow anyone to mention this role', type: 5, required: false }
+          ]
+        },
+        {
+          name: 'permissions',
+          description: 'Modify or inspect permissions on an existing role',
+          type: 1,
+          options: [
+            { name: 'role', description: 'The role to modify permissions for', type: 8, required: true },
+            {
+              name: 'level',
+              description: 'Permission level preset or custom',
+              type: 3,
+              required: true,
+              choices: [
+                { name: '👑 Admin (Full Administrator)', value: 'admin' },
+                { name: '🛡️ Moderator (Kick, Ban, Mute, Delete Messages)', value: 'mod' },
+                { name: '⚡ Support Staff (Manage Messages, Attach Files)', value: 'support' },
+                { name: '👤 Verified Member / Customer (Standard Chat)', value: 'member' },
+                { name: '👁️ Read Only (View Channels Only)', value: 'readonly' },
+                { name: '⛔ None (0 Permissions / Reset)', value: 'none' }
+              ]
+            }
           ]
         },
         {
@@ -232,7 +268,7 @@ async function runRegistration() {
         },
         {
           name: 'list',
-          description: 'List all custom server roles',
+          description: 'List all custom server roles and permissions',
           type: 1
         }
       ]
