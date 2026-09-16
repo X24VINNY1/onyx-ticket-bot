@@ -1590,11 +1590,396 @@ async function processInteraction(interaction) {
         };
       }
     }
+
+    // --- /setup-voice-hub ---
+    if (name === 'setup-voice-hub') {
+      if (!isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **Access Denied:** Only Zen2K staff can deploy the Voice Hub.', flags: 64 }
+        };
+      }
+
+      const targetChannelId = options?.find(o => o.name === 'channel')?.value;
+      const categoryId = options?.find(o => o.name === 'category')?.value;
+
+      const hubPayload = {
+        embeds: [{
+          title: '🔊 Zen2K Temporary Voice Rooms',
+          description: '>>> **Need a private voice channel for 2K Park, Pro-Am, or chilling with friends?**\n\nClick a button below to generate your private squad room instantly.\nYou will receive full control to lock your room, adjust player limits, or delete it when finished.',
+          color: 0x5865F2,
+          image: { url: 'https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif' },
+          fields: [
+            { name: '🎮 2s Park', value: 'Auto-capped at 2 players for 2v2 Ante-Up & Park grind', inline: true },
+            { name: '🔥 3s Park', value: 'Auto-capped at 3 players for 3v3 Park squad', inline: true },
+            { name: '👑 5s Pro-Am', value: 'Auto-capped at 5 players for full 5v5 team', inline: true },
+            { name: '🔊 Squad Room', value: 'Unlimited slots for chilling & community', inline: true }
+          ],
+          footer: { text: 'Zen2K Voice Hub Engine • Powered by officialZen2K' }
+        }],
+        components: [
+          {
+            type: 1,
+            components: [
+              {
+                type: 2,
+                style: 1, // PRIMARY (Blurple)
+                custom_id: 'btn_create_vc:2' + (categoryId ? ':' + categoryId : ''),
+                label: '2s Park (2)',
+                emoji: { name: '🎮' }
+              },
+              {
+                type: 2,
+                style: 3, // SUCCESS (Green)
+                custom_id: 'btn_create_vc:3' + (categoryId ? ':' + categoryId : ''),
+                label: '3s Park (3)',
+                emoji: { name: '🔥' }
+              },
+              {
+                type: 2,
+                style: 3, // SUCCESS (Green)
+                custom_id: 'btn_create_vc:5' + (categoryId ? ':' + categoryId : ''),
+                label: '5s Pro-Am (5)',
+                emoji: { name: '👑' }
+              },
+              {
+                type: 2,
+                style: 2, // SECONDARY (Grey)
+                custom_id: 'btn_create_vc:0' + (categoryId ? ':' + categoryId : ''),
+                label: 'Squad (∞)',
+                emoji: { name: '🔊' }
+              }
+            ]
+          }
+        ]
+      };
+
+      if (targetChannelId && targetChannelId !== channel_id) {
+        try {
+          await discordFetch('/channels/' + targetChannelId + '/messages', {
+            method: 'POST',
+            body: JSON.stringify(hubPayload)
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '✅ Voice Hub successfully deployed in <#' + targetChannelId + '>!', flags: 64 }
+          };
+        } catch (e) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to deploy in <#' + targetChannelId + '>: ' + e.message, flags: 64 }
+          };
+        }
+      }
+
+      return {
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: hubPayload
+      };
+    }
+
+    // --- /vc (Voice Controls) ---
+    if (name === 'vc') {
+      const sub = options?.[0];
+      const subName = sub?.name;
+      const subOpts = sub?.options || [];
+
+      // /vc create [name] [limit]
+      if (subName === 'create') {
+        const rawName = subOpts.find(o => o.name === 'name')?.value || `${user.username}'s Squad`;
+        const limit = Math.max(0, Math.min(99, subOpts.find(o => o.name === 'limit')?.value || 0));
+
+        try {
+          const newCh = await discordFetch('/guilds/' + guild_id + '/channels', {
+            method: 'POST',
+            body: JSON.stringify({
+              name: `🔊 ${rawName}`,
+              type: 2, // GUILD_VOICE
+              user_limit: limit,
+              permission_overwrites: [
+                {
+                  id: user.id,
+                  type: 1, // Member
+                  allow: '1048576' // CONNECT
+                }
+              ]
+            })
+          });
+
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              embeds: [{
+                title: '🔊 Temporary Voice Room Created!',
+                description: `>>> Your custom voice room is ready:\n👉 <#${newCh.id}>\n\nClick below to lock, unlock, or delete your channel when finished.`,
+                color: 0x00FFA3,
+                fields: [
+                  { name: '🏷️ Channel', value: `<#${newCh.id}>`, inline: true },
+                  { name: '👥 Max Slots', value: limit > 0 ? `${limit} Players` : 'Unlimited', inline: true },
+                  { name: '👑 Room Owner', value: `<@${user.id}>`, inline: true }
+                ],
+                footer: { text: 'Zen2K Voice Engine • officialZen2K' }
+              }],
+              components: [
+                {
+                  type: 1,
+                  components: [
+                    { type: 2, style: 2, custom_id: `btn_vc_lock:${newCh.id}:${user.id}`, label: 'Lock Room', emoji: { name: '🔒' } },
+                    { type: 2, style: 2, custom_id: `btn_vc_unlock:${newCh.id}:${user.id}`, label: 'Unlock Room', emoji: { name: '🔓' } },
+                    { type: 2, style: 4, custom_id: `btn_vc_delete:${newCh.id}:${user.id}`, label: 'Delete Room', emoji: { name: '🗑️' } }
+                  ]
+                }
+              ],
+              flags: 64
+            }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to create voice room: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /vc lock
+      if (subName === 'lock') {
+        try {
+          await discordFetch('/channels/' + channel_id + '/permissions/' + guild_id, {
+            method: 'PUT',
+            body: JSON.stringify({ type: 0, allow: '0', deny: '1048576' })
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '🔒 Voice channel has been locked from new members.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to lock: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /vc unlock
+      if (subName === 'unlock') {
+        try {
+          await discordFetch('/channels/' + channel_id + '/permissions/' + guild_id, {
+            method: 'DELETE'
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '🔓 Voice channel is now unlocked for everyone.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to unlock: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /vc limit amount:<number>
+      if (subName === 'limit') {
+        const amount = Math.max(0, Math.min(99, subOpts.find(o => o.name === 'amount')?.value || 0));
+        try {
+          await discordFetch('/channels/' + channel_id, {
+            method: 'PATCH',
+            body: JSON.stringify({ user_limit: amount })
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: `👥 Voice room limit set to ${amount > 0 ? amount + ' players' : 'unlimited'}.` }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to update limit: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /vc delete
+      if (subName === 'delete') {
+        try {
+          await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '🗑️ Voice channel deleted.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to delete: ' + err.message, flags: 64 }
+          };
+        }
+      }
+    }
   }
 
   // TYPE 3: MESSAGE COMPONENT
   if (type === InteractionType.MESSAGE_COMPONENT) {
     const { custom_id, values } = data;
+
+    // Button: Create Temporary Voice Room
+    if (custom_id.startsWith('btn_create_vc:')) {
+      const parts = custom_id.split(':');
+      const limit = parseInt(parts[1]) || 0;
+      const parentId = parts[2] || undefined;
+
+      // Blacklist check
+      const isBlacklisted = await isMemberBlacklisted(guild_id, member);
+      if (isBlacklisted) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '⛔ Blacklisted users cannot create voice rooms.', flags: 64 }
+        };
+      }
+
+      let chLabel = 'Squad';
+      if (limit === 2) chLabel = '2s Park';
+      else if (limit === 3) chLabel = '3s Park';
+      else if (limit === 5) chLabel = '5s Pro-Am';
+
+      try {
+        const payload = {
+          name: `🔊 ${user.username}'s ${chLabel}`,
+          type: 2, // GUILD_VOICE
+          user_limit: limit,
+          permission_overwrites: [
+            {
+              id: user.id,
+              type: 1, // Member
+              allow: '1048576' // CONNECT
+            }
+          ]
+        };
+        if (parentId) payload.parent_id = parentId;
+
+        const newCh = await discordFetch('/guilds/' + guild_id + '/channels', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [{
+              title: '🎉 Temporary Voice Room Generated!',
+              description: `>>> Your squad room is live and ready:\n👉 **<#${newCh.id}>**\n\nClick below to lock, unlock, or delete your channel once your squad is finished.`,
+              color: 0x00FFA3,
+              fields: [
+                { name: '🏷️ Room', value: `<#${newCh.id}>`, inline: true },
+                { name: '👥 Player Limit', value: limit > 0 ? `${limit} Players` : 'Unlimited', inline: true },
+                { name: '👑 Manager', value: `<@${user.id}>`, inline: true }
+              ],
+              footer: { text: 'Zen2K Voice Hub • officialZen2K' }
+            }],
+            components: [
+              {
+                type: 1,
+                components: [
+                  { type: 2, style: 2, custom_id: `btn_vc_lock:${newCh.id}:${user.id}`, label: 'Lock Room', emoji: { name: '🔒' } },
+                  { type: 2, style: 2, custom_id: `btn_vc_unlock:${newCh.id}:${user.id}`, label: 'Unlock Room', emoji: { name: '🔓' } },
+                  { type: 2, style: 4, custom_id: `btn_vc_delete:${newCh.id}:${user.id}`, label: 'Delete Room', emoji: { name: '🗑️' } }
+                ]
+              }
+            ],
+            flags: 64
+          }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to create voice room: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    // Button: Lock Room
+    if (custom_id.startsWith('btn_vc_lock:')) {
+      const parts = custom_id.split(':');
+      const targetChId = parts[1];
+      const ownerId = parts[2];
+
+      if (user.id !== ownerId && !isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Only the room owner (<@' + ownerId + '>) or staff can lock this channel.', flags: 64 }
+        };
+      }
+
+      try {
+        await discordFetch('/channels/' + targetChId + '/permissions/' + guild_id, {
+          method: 'PUT',
+          body: JSON.stringify({ type: 0, allow: '0', deny: '1048576' })
+        });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '🔒 **Room Locked:** New members can no longer join <#' + targetChId + '>.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to lock room: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    // Button: Unlock Room
+    if (custom_id.startsWith('btn_vc_unlock:')) {
+      const parts = custom_id.split(':');
+      const targetChId = parts[1];
+      const ownerId = parts[2];
+
+      if (user.id !== ownerId && !isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Only the room owner (<@' + ownerId + '>) or staff can unlock this channel.', flags: 64 }
+        };
+      }
+
+      try {
+        await discordFetch('/channels/' + targetChId + '/permissions/' + guild_id, {
+          method: 'DELETE'
+        });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '🔓 **Room Unlocked:** Friends can now join <#' + targetChId + '> freely.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to unlock room: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    // Button: Delete Room
+    if (custom_id.startsWith('btn_vc_delete:')) {
+      const parts = custom_id.split(':');
+      const targetChId = parts[1];
+      const ownerId = parts[2];
+
+      if (user.id !== ownerId && !isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Only the room owner (<@' + ownerId + '>) or staff can delete this channel.', flags: 64 }
+        };
+      }
+
+      try {
+        await discordFetch('/channels/' + targetChId, { method: 'DELETE' });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '🗑️ **Room Deleted:** Your temporary voice channel has been removed.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to delete room: ' + err.message, flags: 64 }
+        };
+      }
+    }
 
     // Verify Member Button
     if (custom_id.startsWith('btn_verify_member')) {
