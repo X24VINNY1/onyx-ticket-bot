@@ -314,22 +314,21 @@ async function runRegistration() {
       ]
     },
     {
-      name: 'setup-voice-hub',
-      description: 'Deploy the interactive Join-To-Create Temporary Voice Hub panel',
+      name: 'setup-voice-panel',
+      description: 'Deploy the Master Voice Control Panel (Channel 1549599836913803284)',
       type: 1,
       options: [
-        { name: 'channel', description: 'Channel to deploy voice hub panel to (default: current channel)', type: 7, required: false },
-        { name: 'category', description: 'Category to create temp voice rooms under', type: 7, required: false }
+        { name: 'channel', description: 'Channel to deploy voice control panel to (default: 1549599836913803284)', type: 7, required: false }
       ]
     },
     {
       name: 'vc',
-      description: 'Temporary Voice Room Controls (Lock, Unlock, Limit, Delete)',
+      description: 'Voice Room Controls (Lock, Unlock, Mute, Kick, Limit, Rename, Delete)',
       type: 1,
       options: [
         {
           name: 'create',
-          description: 'Create a custom temporary voice channel',
+          description: 'Create your private squad voice channel',
           type: 1,
           options: [
             { name: 'name', description: 'Room name (e.g. 2s Park Grinding)', type: 3, required: false },
@@ -347,11 +346,43 @@ async function runRegistration() {
           type: 1
         },
         {
+          name: 'mute',
+          description: 'Mute / silence a member in your voice room',
+          type: 1,
+          options: [
+            { name: 'user', description: 'Member to mute', type: 6, required: true }
+          ]
+        },
+        {
+          name: 'unmute',
+          description: 'Unmute a member in your voice room',
+          type: 1,
+          options: [
+            { name: 'user', description: 'Member to unmute', type: 6, required: true }
+          ]
+        },
+        {
+          name: 'kick',
+          description: 'Disconnect a member from your voice room',
+          type: 1,
+          options: [
+            { name: 'user', description: 'Member to disconnect', type: 6, required: true }
+          ]
+        },
+        {
           name: 'limit',
           description: 'Change user limit on your voice room',
           type: 1,
           options: [
             { name: 'amount', description: 'User limit (0-99)', type: 4, required: true }
+          ]
+        },
+        {
+          name: 'rename',
+          description: 'Rename your temporary voice room',
+          type: 1,
+          options: [
+            { name: 'name', description: 'New voice channel name', type: 3, required: true }
           ]
         },
         {
