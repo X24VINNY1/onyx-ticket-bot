@@ -1990,6 +1990,257 @@ async function processInteraction(interaction) {
         }
       }
     }
+
+    // --- /automod ---
+    if (name === 'automod') {
+      if (!isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **Access Denied:** Only Zen2K staff can manage Auto-Mod shields.', flags: 64 }
+        };
+      }
+
+      const sub = options?.[0];
+      const subName = sub?.name;
+      const subOpts = sub?.options || [];
+
+      // /automod setup
+      if (subName === 'setup') {
+        const logChannelId = subOpts.find(o => o.name === 'log_channel')?.value;
+        const timeoutMins = Math.max(1, Math.min(1440, subOpts.find(o => o.name === 'timeout_minutes')?.value || 60));
+        const timeoutSecs = timeoutMins * 60;
+
+        const staffRole = process.env.STAFF_ROLE_ID;
+        const exemptRoles = staffRole ? [staffRole] : [];
+
+        function buildActions(withTimeout = false, customTimeout = timeoutSecs) {
+          const acts = [{ type: 1 }]; // BLOCK_MESSAGE
+          if (logChannelId) {
+            acts.push({ type: 2, metadata: { channel_id: logChannelId } }); // SEND_ALERT_MESSAGE
+          }
+          if (withTimeout) {
+            acts.push({ type: 3, metadata: { duration_seconds: customTimeout } }); // TIMEOUT
+          }
+          return acts;
+        }
+
+        let existingRules = [];
+        try {
+          existingRules = await discordFetch('/guilds/' + guild_id + '/auto-moderation/rules');
+          if (!Array.isArray(existingRules)) existingRules = [];
+        } catch (_) {}
+
+        async function deployOrUpdateRule(rulePayload) {
+          const found = existingRules.find(r => r.name && r.name.toLowerCase() === rulePayload.name.toLowerCase());
+          if (found) {
+            return discordFetch('/guilds/' + guild_id + '/auto-moderation/rules/' + found.id, {
+              method: 'PATCH',
+              body: JSON.stringify(rulePayload)
+            });
+          } else {
+            return discordFetch('/guilds/' + guild_id + '/auto-moderation/rules', {
+              method: 'POST',
+              body: JSON.stringify(rulePayload)
+            });
+          }
+        }
+
+        const deployed = [];
+        const errors = [];
+
+        // Shield 1: Anti-Invite Shield
+        try {
+          await deployOrUpdateRule({
+            name: 'Zen2K Anti-Invite Shield',
+            event_type: 1,
+            trigger_type: 1,
+            trigger_metadata: {
+              keyword_filter: ['*discord.gg/*', '*discord.com/invite/*', '*discordapp.com/invite/*']
+            },
+            actions: buildActions(true, timeoutSecs),
+            enabled: true,
+            exempt_roles: exemptRoles
+          });
+          deployed.push('🛡️ **Anti-Invite Shield:** Blocks unauthorized invite links (`*discord.gg/*`)');
+        } catch (e) {
+          errors.push('Anti-Invite: ' + e.message);
+        }
+
+        // Shield 2: Anti-Phishing & Scam Shield
+        try {
+          await deployOrUpdateRule({
+            name: 'Zen2K Anti-Phishing Shield',
+            event_type: 1,
+            trigger_type: 1,
+            trigger_metadata: {
+              keyword_filter: [
+                '*free-nitro*', '*nitro-gift*', '*gift-nitro*',
+                '*steamcommunity-*.com*', '*steam-gift*', '*steancommunity*',
+                '*dlscord.*', '*discorcl.*', '*discrod.*', '*steamcommuniity.*'
+              ]
+            },
+            actions: buildActions(true, Math.min(timeoutSecs * 2, 86400)),
+            enabled: true,
+            exempt_roles: exemptRoles
+          });
+          deployed.push('🎣 **Anti-Phishing & Scam Shield:** Traps counterfeit Discord Nitro & Steam links');
+        } catch (e) {
+          errors.push('Anti-Phishing: ' + e.message);
+        }
+
+        // Shield 3: Anti-Mass Mention Shield
+        try {
+          await deployOrUpdateRule({
+            name: 'Zen2K Anti-Mass Mention Shield',
+            event_type: 1,
+            trigger_type: 5,
+            trigger_metadata: {
+              mention_total_limit: 4
+            },
+            actions: buildActions(true, timeoutSecs),
+            enabled: true,
+            exempt_roles: exemptRoles
+          });
+          deployed.push('👥 **Anti-Mass Mention Shield:** Throttles raid pings & mass mentions (> 4 mentions)');
+        } catch (e) {
+          errors.push('Anti-Mention: ' + e.message);
+        }
+
+        // Shield 4: Anti-Spam Shield
+        try {
+          await deployOrUpdateRule({
+            name: 'Zen2K Anti-Spam Shield',
+            event_type: 1,
+            trigger_type: 3,
+            actions: buildActions(false),
+            enabled: true,
+            exempt_roles: exemptRoles
+          });
+          deployed.push('🛑 **Anti-Spam Shield:** Intercepts suspected copypasta & message flooding');
+        } catch (e) {
+          errors.push('Anti-Spam: ' + e.message);
+        }
+
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [{
+              title: '🛡️ Zen2K Security Matrix Deployed',
+              description: '>>> **All 4 Auto-Mod defensive layers have been synchronized directly with Discord!**\n\nThese shields run 24/7 on Discord\'s edge with zero latency, blocking unauthorized content before it appears.',
+              color: 0x57F287,
+              fields: [
+                {
+                  name: '✅ Active Defensive Shields (' + deployed.length + '/4)',
+                  value: deployed.join('\n\n'),
+                  inline: false
+                },
+                {
+                  name: '⚙️ Security Enforcement Settings',
+                  value: '• **Offender Penalty:** `' + timeoutMins + ' Minutes Timeout`\n' +
+                         '• **Alert Channel:** ' + (logChannelId ? '<#' + logChannelId + '>' : '`None (In-Channel Block Only)`') + '\n' +
+                         '• **Staff Bypass:** ' + (staffRole ? '<@&' + staffRole + '>' : '`Server Administrators`'),
+                  inline: false
+                },
+                errors.length > 0 ? {
+                  name: '⚠️ Notice',
+                  value: '```\n' + errors.join('\n') + '\n```',
+                  inline: false
+                } : null
+              ].filter(Boolean),
+              footer: { text: 'Zen2K CyberShield • Auto-Moderation Engine' }
+            }]
+          }
+        };
+      }
+
+      // /automod status
+      if (subName === 'status') {
+        try {
+          const rules = await discordFetch('/guilds/' + guild_id + '/auto-moderation/rules');
+          if (!Array.isArray(rules) || rules.length === 0) {
+            return {
+              type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+              data: {
+                embeds: [{
+                  title: '🛡️ Zen2K Auto-Mod Status',
+                  description: '>>> No Auto-Mod rules are currently active on this server.\nRun **`/automod setup`** to deploy all 4 defensive shields instantly!',
+                  color: 0xFEE75C
+                }],
+                flags: 64
+              }
+            };
+          }
+
+          const ruleRows = rules.map((r, i) => {
+            const statusBadge = r.enabled ? '🟢 `ACTIVE`' : '🔴 `DISABLED`';
+            const triggers = r.trigger_metadata?.keyword_filter
+              ? 'Keywords: `' + r.trigger_metadata.keyword_filter.slice(0, 3).join(', ') + '`...'
+              : (r.trigger_type === 5 ? 'Max Mentions: `' + r.trigger_metadata.mention_total_limit + '`' : 'Automatic Filter');
+            return `**${i + 1}. ${r.name}**\n${statusBadge} • ${triggers}`;
+          }).join('\n\n');
+
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              embeds: [{
+                title: '🛡️ Zen2K Auto-Mod Shield Status',
+                description: '>>> **Current Discord Native Protection Rules:**\n\n' + ruleRows,
+                color: 0x5865F2,
+                footer: { text: 'Total Active Rules: ' + rules.filter(r => r.enabled).length + ' of ' + rules.length + ' • Zen2K Security' }
+              }],
+              flags: 64
+            }
+          };
+        } catch (e) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to fetch Auto-Mod status: ' + e.message, flags: 64 }
+          };
+        }
+      }
+
+      // /automod disable / enable
+      if (subName === 'disable' || subName === 'enable') {
+        const targetShield = subOpts.find(o => o.name === 'shield')?.value;
+        const newEnabled = subName === 'enable';
+
+        try {
+          const rules = await discordFetch('/guilds/' + guild_id + '/auto-moderation/rules');
+          if (!Array.isArray(rules)) throw new Error('Could not fetch rules.');
+
+          let updatedCount = 0;
+          for (const r of rules) {
+            let match = false;
+            if (targetShield === 'all') match = true;
+            else if (targetShield === 'invite' && r.name.toLowerCase().includes('invite')) match = true;
+            else if (targetShield === 'scam' && (r.name.toLowerCase().includes('phishing') || r.name.toLowerCase().includes('scam'))) match = true;
+            else if (targetShield === 'mentions' && (r.name.toLowerCase().includes('mention') || r.trigger_type === 5)) match = true;
+            else if (targetShield === 'spam' && (r.name.toLowerCase().includes('spam') || r.trigger_type === 3)) match = true;
+
+            if (match) {
+              await discordFetch('/guilds/' + guild_id + '/auto-moderation/rules/' + r.id, {
+                method: 'PATCH',
+                body: JSON.stringify({ enabled: newEnabled })
+              });
+              updatedCount++;
+            }
+          }
+
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              content: (newEnabled ? '🟢' : '🔴') + ' **Auto-Mod Updated:** ' + updatedCount + ' shield rule(s) ' + (newEnabled ? 'enabled' : 'disabled') + '.',
+              flags: 64
+            }
+          };
+        } catch (e) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to update shield: ' + e.message, flags: 64 }
+          };
+        }
+      }
+    }
   }
 
   // TYPE 3: MESSAGE COMPONENT
