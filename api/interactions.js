@@ -813,9 +813,9 @@ async function processInteraction(interaction) {
                 {
                   type: 4,
                   custom_id: 'vouch_image',
-                  label: 'Screenshot / Proof Image (Optional)',
+                  label: 'Proof / Screenshot Image URL (Optional)',
                   style: 1,
-                  placeholder: 'Paste screenshot link (or post image directly in ticket)',
+                  placeholder: 'Paste image link (e.g. imgur or discord url, leave blank if none)',
                   required: false,
                   max_length: 500
                 }
@@ -1182,32 +1182,10 @@ async function processInteraction(interaction) {
       const starsNum = Math.min(Math.max(rawRating, 1), 5);
       const starString = '⭐'.repeat(starsNum) + (starsNum === 5 ? ' (5/5 Stars • Flawless)' : ' (' + starsNum + '/5 Stars)');
 
-      // Custom image determination: direct input OR auto-detect from ticket channel
+      // Only include image if user explicitly provided a valid URL in the modal input
       let finalImageUrl = '';
       if (rawImage && (rawImage.startsWith('http://') || rawImage.startsWith('https://'))) {
         finalImageUrl = rawImage;
-      } else if (channel_id) {
-        try {
-          const recentMsgs = await discordFetch('/channels/' + channel_id + '/messages?limit=15').catch(() => []);
-          if (Array.isArray(recentMsgs)) {
-            for (const m of recentMsgs) {
-              if (m.attachments && m.attachments.length > 0) {
-                const imgAtt = m.attachments.find(a => a.content_type?.startsWith('image/') || /\.(png|jpe?g|webp|gif)$/i.test(a.url || a.filename || ''));
-                if (imgAtt) {
-                  finalImageUrl = imgAtt.url;
-                  break;
-                }
-              }
-              const match = m.content?.match(/https?:\/\/\S+\.(?:png|jpe?g|webp|gif)(?:\?\S+)?/i);
-              if (match) {
-                finalImageUrl = match[0];
-                break;
-              }
-            }
-          }
-        } catch (scanErr) {
-          console.error('Scan recent messages for image error:', scanErr);
-        }
       }
 
       const vouchEmbed = {
