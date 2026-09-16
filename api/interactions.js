@@ -3,6 +3,7 @@ import { InteractionType, InteractionResponseType, verifyKey } from 'discord-int
 const DISCORD_API = 'https://discord.com/api/v10';
 const TICKETS_CATEGORY_ID = process.env.TICKETS_CATEGORY_ID || '1529702797082365962';
 const TRANSCRIPTS_CHANNEL_ID = process.env.TRANSCRIPTS_CHANNEL_ID || '1529702818796015718';
+const VOUCHES_CHANNEL_ID = process.env.VOUCHES_CHANNEL_ID || '1529699140953702400';
 
 async function discordFetch(endpoint, options = {}) {
   const token = process.env.DISCORD_TOKEN;
@@ -390,7 +391,7 @@ function buildProgressButtons(currentStep = 1) {
   ];
 }
 
-// Build TicketTool-style closed controls (Reopen, Transcript, Delete)
+// Build TicketTool-style closed controls (Reopen, Transcript, Vouch, Delete)
 function buildClosedControls() {
   return [
     {
@@ -398,6 +399,7 @@ function buildClosedControls() {
       components: [
         { type: 2, style: 3, label: 'Reopen Ticket', custom_id: 'btn_reopen_ticket', emoji: { name: '🔓' } },
         { type: 2, style: 1, label: 'Save Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } },
+        { type: 2, style: 2, label: 'Leave a Vouch', custom_id: 'btn_modal_vouch', emoji: { name: '⭐' } },
         { type: 2, style: 4, label: 'Delete Ticket', custom_id: 'btn_delete_ticket', emoji: { name: '⛔' } }
       ]
     }
@@ -523,6 +525,38 @@ async function processInteraction(interaction) {
       };
     }
 
+    // --- /vouch (Post customer vouch card to VOUCHES_CHANNEL_ID 1529699140953702400) ---
+    if (name === 'vouch') {
+      const client = options.find(o => o.name === 'client')?.value || 'Customer';
+      const review = options.find(o => o.name === 'review')?.value || '100% legit and fast delivery!';
+      const service = options.find(o => o.name === 'service')?.value || 'Zen2K Service';
+      const starsNum = options.find(o => o.name === 'stars')?.value || 5;
+      const targetChannelId = options.find(o => o.name === 'channel')?.value || VOUCHES_CHANNEL_ID;
+
+      const starString = '⭐'.repeat(starsNum) + (starsNum === 5 ? ' (5/5 Stars • Flawless)' : ' (' + starsNum + '/5 Stars)');
+
+      const vouchEmbed = {
+        title: '⭐ OFFICIAL ZEN2K CUSTOMER VOUCH',
+        description: '>>> 👤 **Verified Client:** ' + (client.startsWith('<@') ? client : '**' + client + '**') + '\n' +
+          '📦 **Service / Package:** `' + service + '`\n' +
+          '⭐ **Customer Rating:** ' + starString + '\n\n' +
+          '💬 **Feedback:**\n*" ' + review + ' "*',
+        color: 0xFEE75C,
+        image: { url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif' },
+        footer: { text: 'Zen2K Verified Transaction • Logged by ' + user.username + ' • officialZen2K' }
+      };
+
+      await discordFetch('/channels/' + targetChannelId + '/messages', {
+        method: 'POST',
+        body: JSON.stringify({ embeds: [vouchEmbed] })
+      }).catch(e => console.error('Post vouch error:', e));
+
+      return {
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: '✅ Vouch card posted successfully to <#' + targetChannelId + '>!', flags: 64 }
+      };
+    }
+
     // --- /ai-quote ---
     if (name === 'ai-quote') {
       const projectText = options.find(o => o.name === 'project')?.value || 'Custom Project';
@@ -594,11 +628,10 @@ async function processInteraction(interaction) {
 
       if (subName === 'delete') {
         try {
-          await generateAndArchiveTranscript(channel_id, user.id, user.username, false).catch(() => {});
           await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: '🗑️ Channel deleted. Transcript file archived to <#' + TRANSCRIPTS_CHANNEL_ID + '>.' }
+            data: { content: '🗑️ Channel deleted successfully.' }
           };
         } catch (e) {
           return {
@@ -678,17 +711,87 @@ async function processInteraction(interaction) {
           flags: 64,
           embeds: [{
             title: '⭐ Zen2K Verified Customer Reviews',
-            description: '>>> **Trust Score: 4.98 / 5.0 (340+ Orders Delivered)**\n\n' +
+            description: '>>> **Store Rating: 4.98 / 5.0 (340+ Verified Orders)**\n\n' +
               '⭐ ⭐ ⭐ ⭐ ⭐\n' +
               '💬 *"Delivered 900k VC on my console in under 15 minutes, 100% legit."* — `@kyro`\n\n' +
               '⭐ ⭐ ⭐ ⭐ ⭐\n' +
               '💬 *"Vouch for Zen2K! Ban-proof, fast communication, legit seller."* — `@dante`\n\n' +
               '⭐ ⭐ ⭐ ⭐ ⭐\n' +
               '💬 *"Second time buying, got the 1.4M VC pack. Done super fast."* — `@jordan`\n\n' +
-              '✅ All transactions protected with direct staff verification & warranty.',
+              '✅ All transactions protected with direct staff verification & warranty.\n' +
+              '*Click the button below to submit your vouch to <#' + VOUCHES_CHANNEL_ID + '>!*',
             color: 0xFEE75C,
             footer: { text: 'Zen2K Verified Merchant • officialZen2K' }
-          }]
+          }],
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 2,
+                  style: 3,
+                  label: 'Submit a Vouch',
+                  custom_id: 'btn_modal_vouch',
+                  emoji: { name: '✍️' }
+                }
+              ]
+            }
+          ]
+        }
+      };
+    }
+
+    // Open Vouch Submission Modal (Routes directly to VOUCHES_CHANNEL_ID 1529699140953702400)
+    if (custom_id === 'btn_modal_vouch') {
+      return {
+        type: InteractionResponseType.MODAL,
+        data: {
+          custom_id: 'modal_submit_vouch',
+          title: 'Submit Vouch to #' + VOUCHES_CHANNEL_ID,
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  custom_id: 'vouch_service',
+                  label: 'Service Purchased',
+                  style: 1,
+                  placeholder: 'e.g. 900K VC PSN, Custom Bot Setup',
+                  required: true,
+                  max_length: 80
+                }
+              ]
+            },
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  custom_id: 'vouch_rating',
+                  label: 'Rating (1 to 5 Stars)',
+                  style: 1,
+                  value: '5',
+                  required: true,
+                  max_length: 2
+                }
+              ]
+            },
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  custom_id: 'vouch_comment',
+                  label: 'Your Review / Experience',
+                  style: 2,
+                  placeholder: 'Fast delivery, smooth communication, 100% safe...',
+                  required: true,
+                  max_length: 500
+                }
+              ]
+            }
+          ]
         }
       };
     }
@@ -854,13 +957,25 @@ async function processInteraction(interaction) {
       } else if (targetStep === 3) {
         notifyText = '⚡ **In Delivery!** <@' + (clientId || user.id) + '> Work has begun on your account. Please stay logged out of your game.';
       } else if (targetStep === 4) {
-        notifyText = '🎉 <@' + (clientId || user.id) + '> **Order Completed!** Your delivery is ready. Thank you for doing business with Zen2K!';
+        notifyText = '🎉 <@' + (clientId || user.id) + '> **Order Completed!** Your delivery is ready. Thank you for choosing Zen2K!';
       }
 
       if (notifyText) {
+        const extraComponents = targetStep === 4 ? [
+          {
+            type: 1,
+            components: [
+              { type: 2, style: 3, label: 'Leave a Vouch', custom_id: 'btn_modal_vouch', emoji: { name: '⭐' } }
+            ]
+          }
+        ] : [];
+
         discordFetch('/channels/' + channel_id + '/messages', {
           method: 'POST',
-          body: JSON.stringify({ content: notifyText })
+          body: JSON.stringify({
+            content: notifyText,
+            components: extraComponents
+          })
         }).catch(() => {});
       }
 
@@ -873,7 +988,7 @@ async function processInteraction(interaction) {
       };
     }
 
-    // 🔒 CLOSE TICKET (Locks client permissions, auto-archives transcript to vault, and presents Reopen/Save/Delete panel)
+    // 🔒 CLOSE TICKET (Locks client chat permissions, presents Reopen/Save/Vouch/Delete panel - NO auto-save)
     if (custom_id === 'btn_close_ticket') {
       try {
         const ch = await discordFetch('/channels/' + channel_id).catch(() => ({}));
@@ -888,17 +1003,14 @@ async function processInteraction(interaction) {
           }).catch(() => {});
         }
 
-        // Auto-archive transcript immediately to TRANSCRIPTS_CHANNEL_ID on close!
-        await generateAndArchiveTranscript(channel_id, user.id, user.username, false).catch(e => console.error('Auto-archive on close error:', e));
-
         const closedEmbed = {
           title: '🔒 Ticket Closed',
           description: '>>> **Ticket closed by <@' + user.id + '> (`' + user.username + '`).**\n\n' +
-            '✅ *Transcript backup auto-saved to <#' + TRANSCRIPTS_CHANNEL_ID + '>.*\n\n' +
             '**Support Team Controls:**\n' +
             '• 🔓 **Reopen**: Restores messaging access for client.\n' +
-            '• 📑 **Save Transcript**: Attaches `.txt` download right here in chat.\n' +
-            '• ⛔ **Delete Ticket**: Final archive & immediately deletes channel.',
+            '• 📑 **Save Transcript**: Attaches downloadable `.txt` file.\n' +
+            '• ⭐ **Leave a Vouch**: Submit a vouch to <#' + VOUCHES_CHANNEL_ID + '>.\n' +
+            '• ⛔ **Delete Ticket**: Permanently deletes this channel immediately.',
           color: 0xED4245,
           footer: { text: 'Zen2K Ticket Controls • Made by officialZen2K' }
         };
@@ -915,7 +1027,7 @@ async function processInteraction(interaction) {
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '🔒 Ticket closed. Transcript backed up to <#' + TRANSCRIPTS_CHANNEL_ID + '>.' }
+          data: { content: '🔒 Ticket closed by <@' + user.id + '>.' }
         };
       } catch (e) {
         return {
@@ -965,7 +1077,7 @@ async function processInteraction(interaction) {
       }
     }
 
-    // 📑 SAVE TRANSCRIPT (Attaches actual downloadable .txt file to current channel AND vault)
+    // 📑 SAVE TRANSCRIPT (Attaches downloadable .txt file to current channel AND transcripts vault)
     if (custom_id === 'btn_transcript_ticket') {
       try {
         await generateAndArchiveTranscript(channel_id, user.id, user.username, true);
@@ -984,27 +1096,10 @@ async function processInteraction(interaction) {
       }
     }
 
-    // ⛔ DELETE TICKET (Guaranteed synchronous archive of .txt file to vault + channel delete)
+    // ⛔ DELETE TICKET (Instant channel deletion - NO auto-save on delete)
     if (custom_id === 'btn_delete_ticket') {
       try {
-        // 1. Send deletion announcement into ticket
-        await discordFetch('/channels/' + channel_id + '/messages', {
-          method: 'POST',
-          body: JSON.stringify({
-            embeds: [{
-              title: '⛔ Deleting Ticket',
-              description: 'Archiving final `.txt` transcript to <#' + TRANSCRIPTS_CHANNEL_ID + '> and deleting channel...',
-              color: 0xED4245
-            }]
-          })
-        }).catch(() => {});
-
-        // 2. AWAIT transcript generation and save to TRANSCRIPTS_CHANNEL_ID
-        await generateAndArchiveTranscript(channel_id, user.id, user.username, false);
-
-        // 3. Delete channel immediately
         await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
-
         return {
           type: InteractionResponseType.DEFERRED_UPDATE_MESSAGE
         };
@@ -1036,6 +1131,53 @@ async function processInteraction(interaction) {
   if (type === InteractionType.MODAL_SUBMIT) {
     const customId = data.custom_id;
 
+    // Vouch Submission Modal Submit -> ALWAYS POSTS TO VOUCHES_CHANNEL_ID (1529699140953702400)
+    if (customId === 'modal_submit_vouch') {
+      const service = data.components[0].components[0].value;
+      const rawRating = parseInt(data.components[1].components[0].value, 10) || 5;
+      const comment = data.components[2].components[0].value;
+
+      const starsNum = Math.min(Math.max(rawRating, 1), 5);
+      const starString = '⭐'.repeat(starsNum) + (starsNum === 5 ? ' (5/5 Stars • Flawless)' : ' (' + starsNum + '/5 Stars)');
+
+      const vouchEmbed = {
+        title: '⭐ OFFICIAL ZEN2K CUSTOMER VOUCH',
+        description: '>>> 👤 **Verified Client:** <@' + user.id + '> (`' + user.username + '`)\n' +
+          '📦 **Service / Package:** `' + service + '`\n' +
+          '⭐ **Customer Rating:** ' + starString + '\n\n' +
+          '💬 **Feedback:**\n*" ' + comment + ' "*',
+        color: 0xFEE75C,
+        image: { url: 'https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif' },
+        footer: { text: 'Zen2K Verified Transaction • Submitted by ' + user.username + ' • officialZen2K' }
+      };
+
+      // 1. Post directly into the designated Vouches Channel (1529699140953702400)
+      await discordFetch('/channels/' + VOUCHES_CHANNEL_ID + '/messages', {
+        method: 'POST',
+        body: JSON.stringify({ embeds: [vouchEmbed] })
+      }).catch(e => console.error('Post vouch to channel error:', e));
+
+      // 2. Also drop a friendly notice in the ticket if submitted from ticket channel
+      if (channel_id !== VOUCHES_CHANNEL_ID) {
+        await discordFetch('/channels/' + channel_id + '/messages', {
+          method: 'POST',
+          body: JSON.stringify({
+            embeds: [{
+              title: '⭐ Vouch Successfully Submitted',
+              description: 'Thank you <@' + user.id + '>! Your review card has been posted to <#' + VOUCHES_CHANNEL_ID + '>.',
+              color: 0x57F287
+            }]
+          })
+        }).catch(() => {});
+      }
+
+      return {
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: { content: '✅ Thank you for your vouch, <@' + user.id + '>! Your review is live in <#' + VOUCHES_CHANNEL_ID + '>.', flags: 64 }
+      };
+    }
+
+    // Open Ticket Modal Submit
     if (customId.startsWith('modal_open_ticket_')) {
       const category = customId.replace('modal_open_ticket_', '');
       const topic = data.components[0].components[0].value;
