@@ -79,6 +79,7 @@ async function runRegistration() {
             { name: '⭐⭐⭐ (3 Stars - Average)', value: 3 }
           ]
         },
+        { name: 'image', description: 'Screenshot or proof image URL to attach to vouch', type: 3, required: false },
         { name: 'channel', description: 'Channel to send vouch card to (e.g. #vouches)', type: 7, required: false }
       ]
     },
