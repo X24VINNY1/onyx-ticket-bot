@@ -287,6 +287,31 @@ async function runRegistration() {
           type: 1
         }
       ]
+    },
+    {
+      name: 'autorole',
+      description: 'Zen2K Auto-Role Engine (Auto-assigns roles to members)',
+      type: 1,
+      options: [
+        {
+          name: 'set',
+          description: 'Set the automatic role granted to members',
+          type: 1,
+          options: [
+            { name: 'role', description: 'The role to automatically grant', type: 8, required: true }
+          ]
+        },
+        {
+          name: 'check',
+          description: 'Check currently configured auto-role settings',
+          type: 1
+        },
+        {
+          name: 'remove',
+          description: 'Disable automatic role assignment',
+          type: 1
+        }
+      ]
     }
   ];
 
