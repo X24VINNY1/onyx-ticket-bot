@@ -23,6 +23,115 @@ async function discordFetch(endpoint, options = {}) {
   return res.json().catch(() => ({}));
 }
 
+// 🛡️ Zen2K Anti-Troll & Blacklist Security Cache
+let blacklistCache = null;
+let blacklistCacheTime = 0;
+let blacklistRoleIdCache = null;
+
+function isStaff(member) {
+  if (!member) return false;
+  try {
+    const permissions = BigInt(member.permissions || '0');
+    if ((permissions & BigInt(0x8)) === BigInt(0x8) || (permissions & BigInt(0x20)) === BigInt(0x20)) return true;
+  } catch (_) {}
+  const staffRoleId = process.env.STAFF_ROLE_ID;
+  if (staffRoleId && member.roles && member.roles.includes(staffRoleId)) return true;
+  return false;
+}
+
+async function getBlacklistDb() {
+  if (blacklistCache && (Date.now() - blacklistCacheTime < 30000)) {
+    return blacklistCache;
+  }
+  try {
+    const msgs = await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages?limit=50').catch(() => []);
+    if (Array.isArray(msgs)) {
+      const dbMsg = msgs.find(m => m.content && m.content.includes('ZEN2K_SECURITY_BLACKLIST_DB'));
+      if (dbMsg) {
+        const jsonMatch = dbMsg.content.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          blacklistCache = JSON.parse(jsonMatch[1]);
+          blacklistCacheTime = Date.now();
+          return blacklistCache;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error reading blacklist DB:', err);
+  }
+  blacklistCache = {};
+  blacklistCacheTime = Date.now();
+  return blacklistCache;
+}
+
+async function saveBlacklistDb(db) {
+  blacklistCache = db;
+  blacklistCacheTime = Date.now();
+  const dbText = '🔒 **ZEN2K_SECURITY_BLACKLIST_DB** (Do Not Delete)\n```json\n' + JSON.stringify(db, null, 2) + '\n```';
+  try {
+    const msgs = await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages?limit=50').catch(() => []);
+    const existing = Array.isArray(msgs) ? msgs.find(m => m.content && m.content.includes('ZEN2K_SECURITY_BLACKLIST_DB')) : null;
+    if (existing) {
+      await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages/' + existing.id, {
+        method: 'PATCH',
+        body: JSON.stringify({ content: dbText })
+      });
+    } else {
+      await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages', {
+        method: 'POST',
+        body: JSON.stringify({ content: dbText })
+      });
+    }
+  } catch (err) {
+    console.error('Error saving blacklist DB:', err);
+  }
+}
+
+async function getBlacklistRoleId(guildId) {
+  if (blacklistRoleIdCache) return blacklistRoleIdCache;
+  try {
+    const roles = await discordFetch('/guilds/' + guildId + '/roles').catch(() => []);
+    if (Array.isArray(roles)) {
+      const existing = roles.find(r => r.name.toLowerCase() === 'zen2k blacklisted' || r.name.toLowerCase() === 'blacklisted');
+      if (existing) {
+        blacklistRoleIdCache = existing.id;
+        return existing.id;
+      }
+    }
+    const created = await discordFetch('/guilds/' + guildId + '/roles', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: 'Zen2K Blacklisted',
+        color: 0xED4245,
+        permissions: '0',
+        mentionable: false
+      })
+    });
+    if (created && created.id) {
+      blacklistRoleIdCache = created.id;
+      return created.id;
+    }
+  } catch (err) {
+    console.error('Error resolving blacklist role:', err);
+  }
+  return null;
+}
+
+async function isMemberBlacklisted(guildId, member) {
+  if (!member) return false;
+  const userId = member.user?.id;
+  if (!userId) return false;
+  
+  if (blacklistRoleIdCache && member.roles && member.roles.includes(blacklistRoleIdCache)) {
+    return true;
+  }
+  const db = await getBlacklistDb();
+  if (db && db[userId]) {
+    return true;
+  }
+  return false;
+}
+
 // Upload a message with an attached downloadable .txt transcript file + fallback
 async function sendDiscordMessageWithFile(channelId, payloadJson, fileContent, filename) {
   const token = process.env.DISCORD_TOKEN;
@@ -713,6 +822,147 @@ async function processInteraction(interaction) {
         }
       }
     }
+
+    // --- /blacklist (Anti-Troll & Security Engine) ---
+    if (name === 'blacklist') {
+      if (!isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **Access Denied:** Only Zen2K staff and administrators can manage the blacklist.', flags: 64 }
+        };
+      }
+
+      const sub = options?.[0];
+      const subName = sub?.name;
+      const subOpts = sub?.options || [];
+
+      if (subName === 'add') {
+        const targetUserId = subOpts.find(o => o.name === 'user')?.value;
+        const reason = subOpts.find(o => o.name === 'reason')?.value || 'Violating server rules / Chargeback risk';
+
+        const db = await getBlacklistDb();
+        db[targetUserId] = {
+          userId: targetUserId,
+          reason: reason,
+          addedBy: user.username,
+          addedById: user.id,
+          date: new Date().toISOString()
+        };
+        await saveBlacklistDb(db);
+
+        const roleId = await getBlacklistRoleId(guild_id);
+        if (roleId) {
+          await discordFetch('/guilds/' + guild_id + '/members/' + targetUserId + '/roles/' + roleId, {
+            method: 'PUT'
+          }).catch(() => {});
+        }
+
+        const logEmbed = {
+          title: '🛡️ ZEN2K SECURITY • USER BLACKLISTED',
+          description: '>>> ⛔ **Blacklisted User:** <@' + targetUserId + '> (`' + targetUserId + '`)\n' +
+            '👤 **Enforced By:** <@' + user.id + '> (`' + user.username + '`)\n' +
+            '📋 **Reason:** `' + reason + '`\n' +
+            '🕒 **Timestamp:** <t:' + Math.floor(Date.now() / 1000) + ':F>',
+          color: 0xED4245,
+          footer: { text: 'Zen2K Security Engine • officialZen2K' }
+        };
+
+        discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages', {
+          method: 'POST',
+          body: JSON.stringify({ embeds: [logEmbed] })
+        }).catch(() => {});
+
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: '🛡️ **Blacklisted successfully!** <@' + targetUserId + '> has been banned from opening tickets and orders.\n**Reason:** `' + reason + '`',
+            flags: 64
+          }
+        };
+      }
+
+      if (subName === 'remove') {
+        const targetUserId = subOpts.find(o => o.name === 'user')?.value;
+        const db = await getBlacklistDb();
+
+        if (!db[targetUserId]) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '⚠️ <@' + targetUserId + '> is not currently blacklisted.', flags: 64 }
+          };
+        }
+
+        delete db[targetUserId];
+        await saveBlacklistDb(db);
+
+        const roleId = await getBlacklistRoleId(guild_id);
+        if (roleId) {
+          await discordFetch('/guilds/' + guild_id + '/members/' + targetUserId + '/roles/' + roleId, {
+            method: 'DELETE'
+          }).catch(() => {});
+        }
+
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '✅ <@' + targetUserId + '> has been **unblacklisted** and access is restored.', flags: 64 }
+        };
+      }
+
+      if (subName === 'check') {
+        const targetUserId = subOpts.find(o => o.name === 'user')?.value;
+        const db = await getBlacklistDb();
+        const record = db[targetUserId];
+
+        if (record) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              embeds: [{
+                title: '🛡️ Blacklist Status: BLOCKED',
+                description: '>>> ⛔ **User:** <@' + targetUserId + '>\n' +
+                  '📋 **Reason:** `' + record.reason + '`\n' +
+                  '👤 **Logged By:** <@' + record.addedById + '> (`' + record.addedBy + '`)\n' +
+                  '🕒 **Logged At:** <t:' + Math.floor(new Date(record.date).getTime() / 1000) + ':R>',
+                color: 0xED4245,
+                footer: { text: 'Zen2K Security • officialZen2K' }
+              }],
+              flags: 64
+            }
+          };
+        } else {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '✅ <@' + targetUserId + '> is **CLEAN** (not blacklisted).', flags: 64 }
+          };
+        }
+      }
+
+      if (subName === 'list') {
+        const db = await getBlacklistDb();
+        const entries = Object.values(db);
+
+        if (entries.length === 0) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '🛡️ **Zen2K Blacklist is empty!** No users are currently blocked.', flags: 64 }
+          };
+        }
+
+        const lines = entries.map((e, idx) => `${idx + 1}. <@${e.userId}> (\`${e.userId}\`) — **Reason:** ${e.reason} *(by ${e.addedBy})*`);
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [{
+              title: '🛡️ Zen2K Blacklisted Users (' + entries.length + ')',
+              description: lines.join('\n').slice(0, 4000),
+              color: 0xED4245,
+              footer: { text: 'Zen2K Anti-Troll Security • officialZen2K' }
+            }],
+            flags: 64
+          }
+        };
+      }
+    }
   }
 
   // TYPE 3: MESSAGE COMPONENT
@@ -828,6 +1078,15 @@ async function processInteraction(interaction) {
 
     // Category Select on /setup-tickets
     if (custom_id === 'ticket_category_select') {
+      if (await isMemberBlacklisted(guild_id, member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: '⛔ **ACCESS DENIED:** You have been blacklisted from opening tickets or placing orders with **Zen2K**.\nIf you believe this is an error, contact server management.',
+            flags: 64
+          }
+        };
+      }
       const selectedCat = values[0];
       return {
         type: InteractionResponseType.MODAL,
@@ -884,6 +1143,15 @@ async function processInteraction(interaction) {
 
     // Direct Tier Button Click (1-Click Order) OR Legacy Dropdown OR General Buttons
     if (custom_id.startsWith('btn_tier_') || custom_id.startsWith('pricing_tier_select_') || custom_id.startsWith('btn_order_pkg_') || custom_id === 'btn_order_inquire' || custom_id === 'btn_quote_accept') {
+      if (await isMemberBlacklisted(guild_id, member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: '⛔ **ACCESS DENIED:** You have been blacklisted from opening tickets or placing orders with **Zen2K**.\nIf you believe this is an error, contact server management.',
+            flags: 64
+          }
+        };
+      }
       let serviceLabel = 'Service Order';
       let tierLabel = '';
 
@@ -1020,6 +1288,19 @@ async function processInteraction(interaction) {
         }).catch(err => console.error('Notify send error:', err));
       }
 
+      // 🏷️ Feature 1: Dynamic Sidebar Channel Renaming
+      let newChannelName = '';
+      if (targetStep === 2) newChannelName = '💳-paid-' + ticketNum;
+      else if (targetStep === 3) newChannelName = '⚡-delivering-' + ticketNum;
+      else if (targetStep === 4) newChannelName = '✅-done-' + ticketNum;
+
+      if (newChannelName) {
+        discordFetch('/channels/' + channel_id, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: newChannelName })
+        }).catch(err => console.log('Sidebar rename notice:', err.message));
+      }
+
       return {
         type: InteractionResponseType.UPDATE_MESSAGE,
         data: {
@@ -1065,6 +1346,15 @@ async function processInteraction(interaction) {
 
         const closedButtons = buildClosedControls();
 
+        // 🏷️ Rename channel to closed in sidebar
+        const topicMatch = ch.topic?.match(/#(\d+)/);
+        const nameMatch = ch.name?.match(/(\d{4})/);
+        const tNum = topicMatch ? topicMatch[1] : (nameMatch ? nameMatch[1] : channel_id.slice(-4));
+        discordFetch('/channels/' + channel_id, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: '🔒-closed-' + tNum })
+        }).catch(() => {});
+
         await discordFetch('/channels/' + channel_id + '/messages', {
           method: 'POST',
           body: JSON.stringify({
@@ -1098,6 +1388,15 @@ async function processInteraction(interaction) {
             body: JSON.stringify({ type: 1, allow: '68608' })
           }).catch(() => {});
         }
+
+        // 🏷️ Restore ticket channel name in sidebar
+        const topicMatch = ch.topic?.match(/#(\d+)/);
+        const nameMatch = ch.name?.match(/(\d{4})/);
+        const tNum = topicMatch ? topicMatch[1] : (nameMatch ? nameMatch[1] : channel_id.slice(-4));
+        discordFetch('/channels/' + channel_id, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: 'ticket-' + tNum })
+        }).catch(() => {});
 
         const reopenEmbed = {
           title: '🔓 Ticket Reopened',
@@ -1238,6 +1537,15 @@ async function processInteraction(interaction) {
 
     // Open Ticket Modal Submit
     if (customId.startsWith('modal_open_ticket_')) {
+      if (await isMemberBlacklisted(guild_id, member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: '⛔ **ACCESS DENIED:** You have been blacklisted from opening tickets or placing orders with **Zen2K**.\nContact server administration if you believe this is an error.',
+            flags: 64
+          }
+        };
+      }
       const category = customId.replace('modal_open_ticket_', '');
       const topic = data.components[0].components[0].value;
       const details = data.components[1].components[0].value;
