@@ -5,6 +5,8 @@ const TICKETS_CATEGORY_ID = process.env.TICKETS_CATEGORY_ID || '1529702797082365
 const TRANSCRIPTS_CHANNEL_ID = process.env.TRANSCRIPTS_CHANNEL_ID || '1529702818796015718';
 const VOUCHES_CHANNEL_ID = process.env.VOUCHES_CHANNEL_ID || '1529699140953702400';
 const VERIFIED_ROLE_ID = process.env.VERIFIED_ROLE_ID || '1529699129176100914';
+const VOICE_PANEL_CHANNEL_ID = process.env.VOICE_PANEL_CHANNEL_ID || '1549599836913803284';
+const JOIN_TO_CREATE_VC_ID = process.env.JOIN_TO_CREATE_VC_ID || '1549599780257144923';
 
 async function discordFetch(endpoint, options = {}) {
   const token = process.env.DISCORD_TOKEN;
@@ -269,6 +271,147 @@ async function saveAutoroleDb(db) {
   } catch (err) {
     console.error('Error saving autorole DB:', err);
   }
+}
+
+let voiceRoomsCache = null;
+let voiceRoomsCacheTime = 0;
+
+async function getVoiceRoomsDb() {
+  if (voiceRoomsCache && (Date.now() - voiceRoomsCacheTime < 15000)) {
+    return voiceRoomsCache;
+  }
+  try {
+    const msgs = await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages?limit=50').catch(() => []);
+    if (Array.isArray(msgs)) {
+      const dbMsg = msgs.find(m => m.content && m.content.includes('ZEN2K_VOICE_ROOMS_DB'));
+      if (dbMsg) {
+        const jsonMatch = dbMsg.content.match(/```json\s*([\s\S]*?)\s*```/);
+        if (jsonMatch) {
+          voiceRoomsCache = JSON.parse(jsonMatch[1]);
+          voiceRoomsCacheTime = Date.now();
+          return voiceRoomsCache;
+        }
+      }
+    }
+  } catch (err) {
+    console.error('Error reading voice rooms DB:', err);
+  }
+  voiceRoomsCache = {};
+  voiceRoomsCacheTime = Date.now();
+  return voiceRoomsCache;
+}
+
+async function saveVoiceRoomsDb(db) {
+  voiceRoomsCache = db;
+  voiceRoomsCacheTime = Date.now();
+  const dbText = '🔊 **ZEN2K_VOICE_ROOMS_DB** (Do Not Delete)\n```json\n' + JSON.stringify(db, null, 2) + '\n```';
+  try {
+    const msgs = await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages?limit=50').catch(() => []);
+    const existing = Array.isArray(msgs) ? msgs.find(m => m.content && m.content.includes('ZEN2K_VOICE_ROOMS_DB')) : null;
+    if (existing) {
+      await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages/' + existing.id, {
+        method: 'PATCH',
+        body: JSON.stringify({ content: dbText })
+      });
+    } else {
+      await discordFetch('/channels/' + TRANSCRIPTS_CHANNEL_ID + '/messages', {
+        method: 'POST',
+        body: JSON.stringify({ content: dbText })
+      });
+    }
+  } catch (err) {
+    console.error('Error saving voice rooms DB:', err);
+  }
+}
+
+async function getUserVoiceRoom(guildId, userId, username = '') {
+  const db = await getVoiceRoomsDb();
+  if (db && db[userId]) {
+    try {
+      const ch = await discordFetch('/channels/' + db[userId]);
+      if (ch && ch.id) return ch;
+    } catch (_) {}
+  }
+  // Fallback: search guild channels for voice channel owned by user
+  try {
+    const channels = await discordFetch('/guilds/' + guildId + '/channels');
+    if (Array.isArray(channels)) {
+      const found = channels.find(c => c.type === 2 && (
+        (c.permission_overwrites && c.permission_overwrites.some(p => p.id === userId && p.type === 1)) ||
+        (username && c.name.toLowerCase().includes(username.toLowerCase()))
+      ));
+      if (found) {
+        db[userId] = found.id;
+        await saveVoiceRoomsDb(db);
+        return found;
+      }
+    }
+  } catch (_) {}
+  return null;
+}
+
+async function resolveUserId(guildId, input) {
+  if (!input) return null;
+  const directId = input.replace(/[<@!>]/g, '').trim();
+  if (/^\d{17,20}$/.test(directId)) return directId;
+  const cleanName = input.replace(/^@/, '').trim().toLowerCase();
+  try {
+    const searchRes = await discordFetch('/guilds/' + guildId + '/members/search?query=' + encodeURIComponent(cleanName) + '&limit=1');
+    if (Array.isArray(searchRes) && searchRes.length > 0) {
+      return searchRes[0].user?.id;
+    }
+  } catch (_) {}
+  return null;
+}
+
+function buildVoiceControlPanelPayload() {
+  return {
+    embeds: [{
+      title: '🎛️ Zen2K Voice Room Control Center',
+      description: '>>> **Welcome to the Master Voice Channel Manager!**\n\nWhen you enter the **`🔊 Join to Create`** channel (<#1549599780257144923>), your private room is generated.\n\nUse the buttons below to lock your room, mute/unmute members, adjust slots, or delete your squad channel.',
+      color: 0x5865F2,
+      image: { url: 'https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif' },
+      fields: [
+        {
+          name: '🔒 Privacy & Management',
+          value: '• **Lock / Unlock**: Toggle whether other members can join\n• **Mute / Unmute**: Silence any disruptive microphone in your room\n• **Kick / Disconnect**: Remove unwanted players from your room',
+          inline: false
+        },
+        {
+          name: '⚙️ Customization',
+          value: '• **Player Limit**: Set slots for 2s (2), 3s (3), 5s (5), or unlimited (0)\n• **Rename Room**: Personalize your squad channel name\n• **Delete**: Clean up and remove channel when finished',
+          inline: false
+        },
+        {
+          name: '🚪 Join Channel',
+          value: 'Click or join <#1549599780257144923> to enter your private room!',
+          inline: false
+        }
+      ],
+      footer: { text: 'Zen2K Voice Hub • Powered by officialZen2K' }
+    }],
+    components: [
+      {
+        type: 1,
+        components: [
+          { type: 2, style: 1, custom_id: 'btn_vcp_create', label: 'Create Room', emoji: { name: '➕' } },
+          { type: 2, style: 2, custom_id: 'btn_vcp_lock', label: 'Lock', emoji: { name: '🔒' } },
+          { type: 2, style: 2, custom_id: 'btn_vcp_unlock', label: 'Unlock', emoji: { name: '🔓' } },
+          { type: 2, style: 2, custom_id: 'btn_vcp_limit', label: 'Set Limit', emoji: { name: '👥' } },
+          { type: 2, style: 2, custom_id: 'btn_vcp_rename', label: 'Rename', emoji: { name: '✏️' } }
+        ]
+      },
+      {
+        type: 1,
+        components: [
+          { type: 2, style: 4, custom_id: 'btn_vcp_mute', label: 'Mute User', emoji: { name: '🔇' } },
+          { type: 2, style: 3, custom_id: 'btn_vcp_unmute', label: 'Unmute User', emoji: { name: '🔊' } },
+          { type: 2, style: 4, custom_id: 'btn_vcp_kick', label: 'Kick User', emoji: { name: '🚫' } },
+          { type: 2, style: 4, custom_id: 'btn_vcp_delete', label: 'Delete Room', emoji: { name: '🗑️' } }
+        ]
+      }
+    ]
+  };
 }
 
 async function getBlacklistRoleId(guildId) {
@@ -1591,91 +1734,33 @@ async function processInteraction(interaction) {
       }
     }
 
-    // --- /setup-voice-hub ---
-    if (name === 'setup-voice-hub') {
+    // --- /setup-voice-panel ---
+    if (name === 'setup-voice-panel') {
       if (!isStaff(member)) {
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '❌ **Access Denied:** Only Zen2K staff can deploy the Voice Hub.', flags: 64 }
+          data: { content: '❌ **Access Denied:** Only Zen2K staff can deploy the Voice Control Panel.', flags: 64 }
         };
       }
 
-      const targetChannelId = options?.find(o => o.name === 'channel')?.value;
-      const categoryId = options?.find(o => o.name === 'category')?.value;
+      const targetChannelId = options?.find(o => o.name === 'channel')?.value || VOICE_PANEL_CHANNEL_ID;
+      const panelPayload = buildVoiceControlPanelPayload();
 
-      const hubPayload = {
-        embeds: [{
-          title: '🔊 Zen2K Temporary Voice Rooms',
-          description: '>>> **Need a private voice channel for 2K Park, Pro-Am, or chilling with friends?**\n\nClick a button below to generate your private squad room instantly.\nYou will receive full control to lock your room, adjust player limits, or delete it when finished.',
-          color: 0x5865F2,
-          image: { url: 'https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif' },
-          fields: [
-            { name: '🎮 2s Park', value: 'Auto-capped at 2 players for 2v2 Ante-Up & Park grind', inline: true },
-            { name: '🔥 3s Park', value: 'Auto-capped at 3 players for 3v3 Park squad', inline: true },
-            { name: '👑 5s Pro-Am', value: 'Auto-capped at 5 players for full 5v5 team', inline: true },
-            { name: '🔊 Squad Room', value: 'Unlimited slots for chilling & community', inline: true }
-          ],
-          footer: { text: 'Zen2K Voice Hub Engine • Powered by officialZen2K' }
-        }],
-        components: [
-          {
-            type: 1,
-            components: [
-              {
-                type: 2,
-                style: 1, // PRIMARY (Blurple)
-                custom_id: 'btn_create_vc:2' + (categoryId ? ':' + categoryId : ''),
-                label: '2s Park (2)',
-                emoji: { name: '🎮' }
-              },
-              {
-                type: 2,
-                style: 3, // SUCCESS (Green)
-                custom_id: 'btn_create_vc:3' + (categoryId ? ':' + categoryId : ''),
-                label: '3s Park (3)',
-                emoji: { name: '🔥' }
-              },
-              {
-                type: 2,
-                style: 3, // SUCCESS (Green)
-                custom_id: 'btn_create_vc:5' + (categoryId ? ':' + categoryId : ''),
-                label: '5s Pro-Am (5)',
-                emoji: { name: '👑' }
-              },
-              {
-                type: 2,
-                style: 2, // SECONDARY (Grey)
-                custom_id: 'btn_create_vc:0' + (categoryId ? ':' + categoryId : ''),
-                label: 'Squad (∞)',
-                emoji: { name: '🔊' }
-              }
-            ]
-          }
-        ]
-      };
-
-      if (targetChannelId && targetChannelId !== channel_id) {
-        try {
-          await discordFetch('/channels/' + targetChannelId + '/messages', {
-            method: 'POST',
-            body: JSON.stringify(hubPayload)
-          });
-          return {
-            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: '✅ Voice Hub successfully deployed in <#' + targetChannelId + '>!', flags: 64 }
-          };
-        } catch (e) {
-          return {
-            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: '❌ Failed to deploy in <#' + targetChannelId + '>: ' + e.message, flags: 64 }
-          };
-        }
+      try {
+        await discordFetch('/channels/' + targetChannelId + '/messages', {
+          method: 'POST',
+          body: JSON.stringify(panelPayload)
+        });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '✅ Voice Control Panel successfully deployed in <#' + targetChannelId + '>!', flags: 64 }
+        };
+      } catch (e) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to deploy in <#' + targetChannelId + '>: ' + e.message, flags: 64 }
+        };
       }
-
-      return {
-        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-        data: hubPayload
-      };
     }
 
     // --- /vc (Voice Controls) ---
@@ -1683,6 +1768,10 @@ async function processInteraction(interaction) {
       const sub = options?.[0];
       const subName = sub?.name;
       const subOpts = sub?.options || [];
+
+      // Find user's active room
+      const room = await getUserVoiceRoom(guild_id, user.id, user.username);
+      const activeChId = room?.id || (channel_id !== VOICE_PANEL_CHANNEL_ID ? channel_id : null);
 
       // /vc create [name] [limit]
       if (subName === 'create') {
@@ -1706,30 +1795,15 @@ async function processInteraction(interaction) {
             })
           });
 
+          // Save to DB
+          const db = await getVoiceRoomsDb();
+          db[user.id] = newCh.id;
+          await saveVoiceRoomsDb(db);
+
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: {
-              embeds: [{
-                title: '🔊 Temporary Voice Room Created!',
-                description: `>>> Your custom voice room is ready:\n👉 <#${newCh.id}>\n\nClick below to lock, unlock, or delete your channel when finished.`,
-                color: 0x00FFA3,
-                fields: [
-                  { name: '🏷️ Channel', value: `<#${newCh.id}>`, inline: true },
-                  { name: '👥 Max Slots', value: limit > 0 ? `${limit} Players` : 'Unlimited', inline: true },
-                  { name: '👑 Room Owner', value: `<@${user.id}>`, inline: true }
-                ],
-                footer: { text: 'Zen2K Voice Engine • officialZen2K' }
-              }],
-              components: [
-                {
-                  type: 1,
-                  components: [
-                    { type: 2, style: 2, custom_id: `btn_vc_lock:${newCh.id}:${user.id}`, label: 'Lock Room', emoji: { name: '🔒' } },
-                    { type: 2, style: 2, custom_id: `btn_vc_unlock:${newCh.id}:${user.id}`, label: 'Unlock Room', emoji: { name: '🔓' } },
-                    { type: 2, style: 4, custom_id: `btn_vc_delete:${newCh.id}:${user.id}`, label: 'Delete Room', emoji: { name: '🗑️' } }
-                  ]
-                }
-              ],
+              content: `🎉 **Voice Room Created:** <#${newCh.id}>\nClick to hop in! You can control your room in <#${VOICE_PANEL_CHANNEL_ID}>.`,
               flags: 64
             }
           };
@@ -1741,16 +1815,23 @@ async function processInteraction(interaction) {
         }
       }
 
+      if (!activeChId) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **No Active Voice Room:** You must create a room or join <#' + JOIN_TO_CREATE_VC_ID + '> first!', flags: 64 }
+        };
+      }
+
       // /vc lock
       if (subName === 'lock') {
         try {
-          await discordFetch('/channels/' + channel_id + '/permissions/' + guild_id, {
+          await discordFetch('/channels/' + activeChId + '/permissions/' + guild_id, {
             method: 'PUT',
             body: JSON.stringify({ type: 0, allow: '0', deny: '1048576' })
           });
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: '🔒 Voice channel has been locked from new members.' }
+            data: { content: '🔒 Voice room <#' + activeChId + '> is now locked!' }
           };
         } catch (err) {
           return {
@@ -1763,12 +1844,12 @@ async function processInteraction(interaction) {
       // /vc unlock
       if (subName === 'unlock') {
         try {
-          await discordFetch('/channels/' + channel_id + '/permissions/' + guild_id, {
+          await discordFetch('/channels/' + activeChId + '/permissions/' + guild_id, {
             method: 'DELETE'
           });
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: '🔓 Voice channel is now unlocked for everyone.' }
+            data: { content: '🔓 Voice room <#' + activeChId + '> is now unlocked!' }
           };
         } catch (err) {
           return {
@@ -1778,11 +1859,82 @@ async function processInteraction(interaction) {
         }
       }
 
+      // /vc mute user:<user>
+      if (subName === 'mute') {
+        const targetUserId = subOpts.find(o => o.name === 'user')?.value;
+        try {
+          await discordFetch('/channels/' + activeChId + '/permissions/' + targetUserId, {
+            method: 'PUT',
+            body: JSON.stringify({ type: 1, allow: '0', deny: '2097152' })
+          });
+          await discordFetch('/guilds/' + guild_id + '/members/' + targetUserId, {
+            method: 'PATCH',
+            body: JSON.stringify({ mute: true })
+          }).catch(() => {});
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '🔇 <@' + targetUserId + '> has been muted in your voice room.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to mute user: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /vc unmute user:<user>
+      if (subName === 'unmute') {
+        const targetUserId = subOpts.find(o => o.name === 'user')?.value;
+        try {
+          await discordFetch('/channels/' + activeChId + '/permissions/' + targetUserId, {
+            method: 'DELETE'
+          }).catch(() => {});
+          await discordFetch('/guilds/' + guild_id + '/members/' + targetUserId, {
+            method: 'PATCH',
+            body: JSON.stringify({ mute: false })
+          }).catch(() => {});
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '🔊 <@' + targetUserId + '> has been unmuted in your voice room.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to unmute user: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // /vc kick user:<user>
+      if (subName === 'kick') {
+        const targetUserId = subOpts.find(o => o.name === 'user')?.value;
+        try {
+          await discordFetch('/guilds/' + guild_id + '/members/' + targetUserId, {
+            method: 'PATCH',
+            body: JSON.stringify({ channel_id: null })
+          }).catch(() => {});
+          await discordFetch('/channels/' + activeChId + '/permissions/' + targetUserId, {
+            method: 'PUT',
+            body: JSON.stringify({ type: 1, allow: '0', deny: '1048576' })
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '🚫 <@' + targetUserId + '> has been disconnected from your voice room.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to disconnect user: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
       // /vc limit amount:<number>
       if (subName === 'limit') {
         const amount = Math.max(0, Math.min(99, subOpts.find(o => o.name === 'amount')?.value || 0));
         try {
-          await discordFetch('/channels/' + channel_id, {
+          await discordFetch('/channels/' + activeChId, {
             method: 'PATCH',
             body: JSON.stringify({ user_limit: amount })
           });
@@ -1798,10 +1950,33 @@ async function processInteraction(interaction) {
         }
       }
 
+      // /vc rename name:<string>
+      if (subName === 'rename') {
+        const newName = subOpts.find(o => o.name === 'name')?.value || 'Squad Room';
+        try {
+          await discordFetch('/channels/' + activeChId, {
+            method: 'PATCH',
+            body: JSON.stringify({ name: '🔊 ' + newName })
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '✏️ Voice room renamed to `🔊 ' + newName + '`.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to rename: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
       // /vc delete
       if (subName === 'delete') {
         try {
-          await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
+          await discordFetch('/channels/' + activeChId, { method: 'DELETE' });
+          const db = await getVoiceRoomsDb();
+          delete db[user.id];
+          await saveVoiceRoomsDb(db);
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: { content: '🗑️ Voice channel deleted.' }
@@ -1819,6 +1994,303 @@ async function processInteraction(interaction) {
   // TYPE 3: MESSAGE COMPONENT
   if (type === InteractionType.MESSAGE_COMPONENT) {
     const { custom_id, values } = data;
+
+    // ===== MASTER VOICE CONTROL PANEL (Channel 1549599836913803284) =====
+    if (custom_id === 'btn_vcp_create') {
+      const existing = await getUserVoiceRoom(guild_id, user.id, user.username);
+      if (existing) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '✅ You already have an active squad room: <#' + existing.id + '>!', flags: 64 }
+        };
+      }
+
+      try {
+        const newCh = await discordFetch('/guilds/' + guild_id + '/channels', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: `🔊 ${user.username}'s Squad`,
+            type: 2, // GUILD_VOICE
+            permission_overwrites: [
+              {
+                id: user.id,
+                type: 1, // Member
+                allow: '1048576' // CONNECT
+              }
+            ]
+          })
+        });
+
+        const db = await getVoiceRoomsDb();
+        db[user.id] = newCh.id;
+        await saveVoiceRoomsDb(db);
+
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: `🎉 **Voice Room Generated:** <#${newCh.id}>\nClick to hop in! You have full control over this channel.`,
+            flags: 64
+          }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to create room: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    if (custom_id === 'btn_vcp_lock') {
+      const room = await getUserVoiceRoom(guild_id, user.id, user.username);
+      if (!room) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **No Active Room:** Join <#' + JOIN_TO_CREATE_VC_ID + '> or click **`[ ➕ Create Room ]`** first!', flags: 64 }
+        };
+      }
+
+      try {
+        await discordFetch('/channels/' + room.id + '/permissions/' + guild_id, {
+          method: 'PUT',
+          body: JSON.stringify({ type: 0, allow: '0', deny: '1048576' })
+        });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '🔒 **Room Locked:** <#' + room.id + '> is now closed to new members.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to lock: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    if (custom_id === 'btn_vcp_unlock') {
+      const room = await getUserVoiceRoom(guild_id, user.id, user.username);
+      if (!room) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **No Active Room:** Join <#' + JOIN_TO_CREATE_VC_ID + '> or click **`[ ➕ Create Room ]`** first!', flags: 64 }
+        };
+      }
+
+      try {
+        await discordFetch('/channels/' + room.id + '/permissions/' + guild_id, {
+          method: 'DELETE'
+        });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '🔓 **Room Unlocked:** <#' + room.id + '> is now open for friends.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to unlock: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    if (custom_id === 'btn_vcp_delete') {
+      const room = await getUserVoiceRoom(guild_id, user.id, user.username);
+      if (!room) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **No Active Room:** You do not have an active voice channel to delete.', flags: 64 }
+        };
+      }
+
+      try {
+        await discordFetch('/channels/' + room.id, { method: 'DELETE' });
+        const db = await getVoiceRoomsDb();
+        delete db[user.id];
+        await saveVoiceRoomsDb(db);
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '🗑️ **Room Deleted:** Your voice channel has been removed.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to delete room: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    if (custom_id === 'btn_vcp_limit') {
+      const room = await getUserVoiceRoom(guild_id, user.id, user.username);
+      if (!room) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **No Active Room:** Join <#' + JOIN_TO_CREATE_VC_ID + '> or click **`[ ➕ Create Room ]`** first!', flags: 64 }
+        };
+      }
+
+      return {
+        type: InteractionResponseType.MODAL,
+        data: {
+          custom_id: 'modal_vcp_limit:' + room.id,
+          title: '👥 Set Voice Room Limit',
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  custom_id: 'limit_val',
+                  label: 'Player Limit (0 for unlimited, 2-99)',
+                  style: 1,
+                  min_length: 1,
+                  max_length: 3,
+                  placeholder: '2',
+                  required: true
+                }
+              ]
+            }
+          ]
+        }
+      };
+    }
+
+    if (custom_id === 'btn_vcp_rename') {
+      const room = await getUserVoiceRoom(guild_id, user.id, user.username);
+      if (!room) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **No Active Room:** Join <#' + JOIN_TO_CREATE_VC_ID + '> or click **`[ ➕ Create Room ]`** first!', flags: 64 }
+        };
+      }
+
+      return {
+        type: InteractionResponseType.MODAL,
+        data: {
+          custom_id: 'modal_vcp_rename:' + room.id,
+          title: '✏️ Rename Your Voice Room',
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  custom_id: 'name_val',
+                  label: 'New Channel Name',
+                  style: 1,
+                  min_length: 1,
+                  max_length: 50,
+                  placeholder: 'Ante-Up 2s Grind',
+                  required: true
+                }
+              ]
+            }
+          ]
+        }
+      };
+    }
+
+    if (custom_id === 'btn_vcp_mute') {
+      const room = await getUserVoiceRoom(guild_id, user.id, user.username);
+      if (!room) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **No Active Room:** Join <#' + JOIN_TO_CREATE_VC_ID + '> or click **`[ ➕ Create Room ]`** first!', flags: 64 }
+        };
+      }
+
+      return {
+        type: InteractionResponseType.MODAL,
+        data: {
+          custom_id: 'modal_vcp_mute:' + room.id,
+          title: '🔇 Mute Member in Your Room',
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  custom_id: 'target_val',
+                  label: 'User @mention or User ID',
+                  style: 1,
+                  min_length: 2,
+                  max_length: 35,
+                  placeholder: '@username or 123456789012345678',
+                  required: true
+                }
+              ]
+            }
+          ]
+        }
+      };
+    }
+
+    if (custom_id === 'btn_vcp_unmute') {
+      const room = await getUserVoiceRoom(guild_id, user.id, user.username);
+      if (!room) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **No Active Room:** Join <#' + JOIN_TO_CREATE_VC_ID + '> or click **`[ ➕ Create Room ]`** first!', flags: 64 }
+        };
+      }
+
+      return {
+        type: InteractionResponseType.MODAL,
+        data: {
+          custom_id: 'modal_vcp_unmute:' + room.id,
+          title: '🔊 Unmute Member in Your Room',
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  custom_id: 'target_val',
+                  label: 'User @mention or User ID',
+                  style: 1,
+                  min_length: 2,
+                  max_length: 35,
+                  placeholder: '@username or 123456789012345678',
+                  required: true
+                }
+              ]
+            }
+          ]
+        }
+      };
+    }
+
+    if (custom_id === 'btn_vcp_kick') {
+      const room = await getUserVoiceRoom(guild_id, user.id, user.username);
+      if (!room) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **No Active Room:** Join <#' + JOIN_TO_CREATE_VC_ID + '> or click **`[ ➕ Create Room ]`** first!', flags: 64 }
+        };
+      }
+
+      return {
+        type: InteractionResponseType.MODAL,
+        data: {
+          custom_id: 'modal_vcp_kick:' + room.id,
+          title: '🚫 Kick / Disconnect Member',
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 4,
+                  custom_id: 'target_val',
+                  label: 'User @mention or User ID to disconnect',
+                  style: 1,
+                  min_length: 2,
+                  max_length: 35,
+                  placeholder: '@username or 123456789012345678',
+                  required: true
+                }
+              ]
+            }
+          ]
+        }
+      };
+    }
 
     // Button: Create Temporary Voice Room
     if (custom_id.startsWith('btn_create_vc:')) {
@@ -2754,6 +3226,149 @@ async function processInteraction(interaction) {
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: { content: '✅ Thank you for your vouch, <@' + user.id + '>! Your review is live in <#' + VOUCHES_CHANNEL_ID + '>.', flags: 64 }
       };
+    }
+
+    // Voice Control Panel Modals
+    if (customId.startsWith('modal_vcp_limit:')) {
+      const targetRoomId = customId.split(':')[1];
+      const rawLimit = parseInt(data.components[0]?.components[0]?.value, 10);
+      const newLimit = isNaN(rawLimit) ? 0 : Math.min(Math.max(rawLimit, 0), 99);
+      try {
+        await discordFetch('/channels/' + targetRoomId, {
+          method: 'PATCH',
+          body: JSON.stringify({ user_limit: newLimit })
+        });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            content: '👥 **Player Limit Updated:** Your room limit is now set to **' + (newLimit === 0 ? 'Unlimited' : newLimit + ' players') + '**.',
+            flags: 64
+          }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to update limit: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    if (customId.startsWith('modal_vcp_rename:')) {
+      const targetRoomId = customId.split(':')[1];
+      const newName = (data.components[0]?.components[0]?.value || '').trim().slice(0, 50);
+      if (!newName) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Room name cannot be empty.', flags: 64 }
+        };
+      }
+      try {
+        await discordFetch('/channels/' + targetRoomId, {
+          method: 'PATCH',
+          body: JSON.stringify({ name: '🔊 ' + newName })
+        });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '✏️ **Voice Room Renamed:** Channel is now named **🔊 ' + newName + '**.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to rename room: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    if (customId.startsWith('modal_vcp_mute:')) {
+      const targetRoomId = customId.split(':')[1];
+      const rawInput = data.components[0]?.components[0]?.value?.trim() || '';
+      const targetUserId = await resolveUserId(guild_id, rawInput);
+      if (!targetUserId) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Could not find member `' + rawInput + '`. Please provide a valid @mention or User ID.', flags: 64 }
+        };
+      }
+      try {
+        await discordFetch('/channels/' + targetRoomId + '/permissions/' + targetUserId, {
+          method: 'PUT',
+          body: JSON.stringify({ type: 1, allow: '0', deny: '2097152' })
+        });
+        await discordFetch('/guilds/' + guild_id + '/members/' + targetUserId, {
+          method: 'PATCH',
+          body: JSON.stringify({ mute: true })
+        }).catch(() => {});
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '🔇 **User Silenced:** <@' + targetUserId + '> is now muted in your voice room.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to mute user: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    if (customId.startsWith('modal_vcp_unmute:')) {
+      const targetRoomId = customId.split(':')[1];
+      const rawInput = data.components[0]?.components[0]?.value?.trim() || '';
+      const targetUserId = await resolveUserId(guild_id, rawInput);
+      if (!targetUserId) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Could not find member `' + rawInput + '`. Please provide a valid @mention or User ID.', flags: 64 }
+        };
+      }
+      try {
+        await discordFetch('/channels/' + targetRoomId + '/permissions/' + targetUserId, {
+          method: 'DELETE'
+        }).catch(() => {});
+        await discordFetch('/guilds/' + guild_id + '/members/' + targetUserId, {
+          method: 'PATCH',
+          body: JSON.stringify({ mute: false })
+        }).catch(() => {});
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '🔊 **User Unmuted:** <@' + targetUserId + '> can now speak in your voice room.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to unmute user: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    if (customId.startsWith('modal_vcp_kick:')) {
+      const targetRoomId = customId.split(':')[1];
+      const rawInput = data.components[0]?.components[0]?.value?.trim() || '';
+      const targetUserId = await resolveUserId(guild_id, rawInput);
+      if (!targetUserId) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Could not find member `' + rawInput + '`. Please provide a valid @mention or User ID.', flags: 64 }
+        };
+      }
+      try {
+        await discordFetch('/guilds/' + guild_id + '/members/' + targetUserId, {
+          method: 'PATCH',
+          body: JSON.stringify({ channel_id: null })
+        }).catch(() => {});
+        await discordFetch('/channels/' + targetRoomId + '/permissions/' + targetUserId, {
+          method: 'PUT',
+          body: JSON.stringify({ type: 1, allow: '0', deny: '1048576' })
+        });
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '🚫 **User Disconnected:** <@' + targetUserId + '> has been kicked from your voice room.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to disconnect user: ' + err.message, flags: 64 }
+        };
+      }
     }
 
     // Open Ticket Modal Submit
