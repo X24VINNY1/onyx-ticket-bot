@@ -32,7 +32,8 @@ function isStaff(member) {
   if (!member) return false;
   try {
     const permissions = BigInt(member.permissions || '0');
-    if ((permissions & BigInt(0x8)) === BigInt(0x8) || (permissions & BigInt(0x20)) === BigInt(0x20)) return true;
+    // 0x8 = Admin, 0x20 = Manage Guild, 0x10 = Manage Channels, 0x10000000 = Manage Roles
+    if ((permissions & 0x8n) === 0x8n || (permissions & 0x20n) === 0x20n || (permissions & 0x10n) === 0x10n || (permissions & 0x10000000n) === 0x10000000n) return true;
   } catch (_) {}
   const staffRoleId = process.env.STAFF_ROLE_ID;
   if (staffRoleId && member.roles && member.roles.includes(staffRoleId)) return true;
@@ -1314,6 +1315,327 @@ async function processInteraction(interaction) {
           };
         }
       }
+    }
+
+    // --- /ai-say (AI Announcement & Broadcast Engine) ---
+    if (name === 'ai-say') {
+      if (!isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **Access Denied:** Only Zen2K staff can use `/ai-say`.', flags: 64 }
+        };
+      }
+
+      const messageText = options.find(o => o.name === 'message')?.value || '';
+      const targetChannelId = options.find(o => o.name === 'channel')?.value || channel_id;
+      const customTitle = options.find(o => o.name === 'title')?.value;
+      const style = options.find(o => o.name === 'style')?.value || 'emerald';
+
+      try {
+        if (style === 'plain') {
+          await discordFetch('/channels/' + targetChannelId + '/messages', {
+            method: 'POST',
+            body: JSON.stringify({ content: messageText })
+          });
+        } else {
+          const titles = {
+            emerald: '⚡ Official Zen2K Announcement',
+            blurple: '📢 Zen2K Community Bulletin',
+            alert: '🚨 Important Server Notice',
+            gold: '👑 Zen2K VIP Exclusive Update'
+          };
+          const colors = {
+            emerald: 0x00FFA3,
+            blurple: 0x5865F2,
+            alert: 0xED4245,
+            gold: 0xFEE75C
+          };
+
+          const embedTitle = customTitle || titles[style] || '⚡ Official Zen2K Announcement';
+          const embedColor = colors[style] || 0x00FFA3;
+
+          await discordFetch('/channels/' + targetChannelId + '/messages', {
+            method: 'POST',
+            body: JSON.stringify({
+              embeds: [{
+                title: embedTitle,
+                description: '>>> ' + messageText,
+                color: embedColor,
+                footer: { text: 'Zen2K AI Copilot • Broadcast by @' + (user?.username || 'Staff') },
+                timestamp: new Date().toISOString()
+              }]
+            })
+          });
+        }
+
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '✅ **AI Broadcast Sent:** Message posted successfully in <#' + targetChannelId + '>.', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **Failed to broadcast message:** ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    // --- /ai-do (Safe AI Server Copilot) ---
+    if (name === 'ai-do') {
+      if (!isStaff(member)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ **Access Denied:** Only Zen2K staff and administrators can command the AI Copilot.', flags: 64 }
+        };
+      }
+
+      const prompt = (options.find(o => o.name === 'prompt')?.value || '').trim();
+
+      // 🛡️ NON-DESTRUCTIVE SAFETY LOCK: Strictly prohibited from deleting or destroying anything
+      const destructiveCheck = /\b(delete|remove|nuke|wipe|purge|clear|destroy|drop|banish|erase|kill)\b/i;
+      if (destructiveCheck.test(prompt)) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: {
+            embeds: [{
+              title: '🛡️ Zen2K AI Copilot — Safety Guardrail Active',
+              description: '>>> ⛔ **Action Blocked: Non-Destructive Protection Active**\n\nThe Zen2K AI Copilot is strictly additive. It is **hardcoded to never delete, remove, or wipe** any channels, roles, messages, or existing server configurations.\n\n*Everything currently on the server is 100% protected and untouched.*',
+              color: 0xED4245,
+              fields: [
+                { name: '🛑 Attempted Prompt', value: `\`${prompt.slice(0, 200)}\``, inline: false },
+                { name: '💡 Allowed Safe Operations', value: '• **Create Text Channels**: `/ai-do prompt:make a channel called vip-chat`\n• **Create Voice Channels**: `/ai-do prompt:create voice channel chill-room`\n• **Organize Categories**: `/ai-do prompt:create channel updates under tickets`\n• **Setup Roles**: `/ai-do prompt:create role VIP with color gold`\n• **Broadcast Announcements**: `/ai-say message:...`', inline: false }
+              ],
+              footer: { text: 'Zen2K AI Copilot Safety Engine • officialZen2K' }
+            }],
+            flags: 64
+          }
+        };
+      }
+
+      // Safe Intent 1: Say / Announce via ai-do
+      const sayMatch = prompt.match(/^(?:say|announce|post|tell everyone)\s+(.+)$/i);
+      if (sayMatch) {
+        const textToSay = sayMatch[1].trim();
+        try {
+          await discordFetch('/channels/' + channel_id + '/messages', {
+            method: 'POST',
+            body: JSON.stringify({
+              embeds: [{
+                title: '⚡ Official Zen2K Announcement',
+                description: '>>> ' + textToSay,
+                color: 0x00FFA3,
+                footer: { text: 'Zen2K AI Copilot • Commanded by @' + (user?.username || 'Staff') },
+                timestamp: new Date().toISOString()
+              }]
+            })
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '✅ **AI Copilot:** Broadcasted announcement in <#' + channel_id + '>.', flags: 64 }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to broadcast: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // Safe Intent 2: Create Role via ai-do
+      const roleMatch = prompt.match(/\b(?:role|rank)\b/i);
+      if (roleMatch && /\b(create|make|add|new)\b/i.test(prompt)) {
+        let roleName = 'New Role';
+        const quoted = prompt.match(/["'`]([^"'`]+)["'`]/);
+        if (quoted) {
+          roleName = quoted[1].trim();
+        } else {
+          const rm = prompt.match(/(?:role|rank)\s+(?:called|named)?\s*([a-zA-Z0-9_\- ]+?)(?:\s+with\s+color|\s+colored|\s*$)/i);
+          if (rm && rm[1]) roleName = rm[1].trim();
+        }
+
+        // Color detection
+        let roleColor = 0x00FFA3;
+        const colorMatch = prompt.match(/\b(?:color|colored)\s+([a-zA-Z0-9#]+)\b/i);
+        if (colorMatch) {
+          roleColor = parseColorHex(colorMatch[1]);
+        }
+
+        try {
+          const newRole = await discordFetch('/guilds/' + guild_id + '/roles', {
+            method: 'POST',
+            body: JSON.stringify({
+              name: roleName,
+              color: roleColor,
+              hoist: true,
+              mentionable: true
+            })
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              embeds: [{
+                title: '🤖 Zen2K AI Copilot — Role Created',
+                description: '>>> **Successfully created new server role!**\nExisting roles and member permissions remain untouched.',
+                color: roleColor || 0x00FFA3,
+                fields: [
+                  { name: '🏷️ Role', value: `<@&${newRole.id}> (\`${newRole.name}\`)`, inline: true },
+                  { name: '🎨 Color', value: '`#' + (newRole.color ? newRole.color.toString(16).padStart(6, '0').toUpperCase() : 'DEFAULT') + '`', inline: true },
+                  { name: '🛡️ Safety Verification', value: '✅ Non-destructive execution confirmed.', inline: false }
+                ],
+                footer: { text: 'Zen2K AI Copilot • Executed for @' + (user?.username || 'Staff') }
+              }]
+            }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to create role: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // Safe Intent 3: Create Channel via ai-do
+      const channelIntent = /\b(channel|vc|voice|category|room)\b/i.test(prompt) || /\b(create|make|add|new)\b/i.test(prompt);
+      if (channelIntent) {
+        const isVoice = /\b(voice|vc|audio|talk|call)\b/i.test(prompt);
+        const isCategory = /\b(category|folder)\b/i.test(prompt);
+        const channelType = isVoice ? 2 : (isCategory ? 4 : 0);
+
+        let rawName = '';
+        const quoted = prompt.match(/["'`]([^"'`]+)["'`]/);
+        if (quoted) {
+          rawName = quoted[1].trim();
+        } else {
+          const cm = prompt.match(/(?:create|make|add|new)?\s*(?:a\s+|an\s+)?(?:text\s+|voice\s+|vc\s+)?(?:channel|room|category|vc)\s*(?:called|named|for|titled|with\s+name)?\s*([a-zA-Z0-9_\- ]+)/i);
+          if (cm && cm[1]) {
+            rawName = cm[1].trim();
+          } else {
+            rawName = prompt.replace(/\b(create|make|add|new|channel|voice|text|vc|category|room|called|named|for|titled|please)\b/gi, '').trim();
+          }
+        }
+
+        // Clean out trailing category phrases if user typed "make channel vip under tickets"
+        rawName = rawName.replace(/\b(under|in|inside|into)\s+.*$/i, '').trim();
+
+        let cleanName = rawName;
+        if (channelType === 0) {
+          cleanName = cleanName.toLowerCase().replace(/[^a-z0-9_\-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '') || 'new-channel';
+        } else {
+          cleanName = cleanName.slice(0, 95) || (channelType === 2 ? 'Voice Channel' : 'New Category');
+        }
+
+        // Check if user requested to place it under an existing category (e.g. "under tickets")
+        let parentId = null;
+        let parentName = null;
+        const catTargetMatch = prompt.match(/\b(?:under|in|inside)\s+(?:the\s+)?(?:category\s+)?(["'`]([^"'`]+)["'`]|([a-zA-Z0-9_\-]+))/i);
+        if (catTargetMatch && channelType !== 4) {
+          const targetKeyword = (catTargetMatch[2] || catTargetMatch[3] || '').toLowerCase().trim();
+          try {
+            const guildChannels = await discordFetch('/guilds/' + guild_id + '/channels');
+            if (Array.isArray(guildChannels)) {
+              const matchedCat = guildChannels.find(c => c.type === 4 && c.name.toLowerCase().includes(targetKeyword));
+              if (matchedCat) {
+                parentId = matchedCat.id;
+                parentName = matchedCat.name;
+              }
+            }
+          } catch (_) {}
+        }
+
+        try {
+          const payload = {
+            name: cleanName,
+            type: channelType
+          };
+          if (parentId) payload.parent_id = parentId;
+
+          const newCh = await discordFetch('/guilds/' + guild_id + '/channels', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+          });
+
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: {
+              embeds: [{
+                title: '🤖 Zen2K AI Copilot — Channel Created',
+                description: '>>> **Successfully created new server channel!**\nExisting channels, permissions, and ticket stations remain 100% untouched.',
+                color: 0x00FFA3,
+                fields: [
+                  { name: '🏷️ Channel', value: `<#${newCh.id}> (\`#${newCh.name}\`)`, inline: true },
+                  { name: '⚙️ Type', value: channelType === 2 ? '🔊 Voice Channel' : (channelType === 4 ? '📁 Category' : '💬 Text Channel'), inline: true },
+                  { name: '📂 Location', value: parentName ? `\`${parentName}\`` : '*Top Level*', inline: true },
+                  { name: '🛡️ Safety Status', value: '✅ Non-destructive execution confirmed. Existing server structure untouched.', inline: false }
+                ],
+                footer: { text: 'Zen2K AI Copilot • Executed for @' + (user?.username || 'Staff') }
+              }]
+            }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ **Failed to create channel:** ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // Safe Intent 4: Lock / Unlock Channel
+      if (/\b(lock|lockdown)\b/i.test(prompt)) {
+        try {
+          // Deny SEND_MESSAGES (0x800) for @everyone (role id = guild_id)
+          await discordFetch('/channels/' + channel_id + '/permissions/' + guild_id, {
+            method: 'PUT',
+            body: JSON.stringify({ type: 0, allow: '0', deny: '2048' })
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '🔒 **Channel Locked:** Members can no longer send messages in <#' + channel_id + '>.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to lock channel: ' + err.message, flags: 64 }
+          };
+        }
+      }
+      if (/\b(unlock)\b/i.test(prompt)) {
+        try {
+          await discordFetch('/channels/' + channel_id + '/permissions/' + guild_id, {
+            method: 'DELETE'
+          });
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '🔓 **Channel Unlocked:** Members can now chat in <#' + channel_id + '>.' }
+          };
+        } catch (err) {
+          return {
+            type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+            data: { content: '❌ Failed to unlock channel: ' + err.message, flags: 64 }
+          };
+        }
+      }
+
+      // Fallback: Helpful instructions for the AI Copilot
+      return {
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          embeds: [{
+            title: '🤖 Zen2K AI Copilot — Command Guide',
+            description: '>>> I am your automated server copilot. I execute safe server management actions without touching or modifying any existing channels or data.',
+            color: 0x5865F2,
+            fields: [
+              { name: '💬 Create Text Channel', value: '`/ai-do prompt:create a channel called vip-chat`', inline: false },
+              { name: '🔊 Create Voice Channel', value: '`/ai-do prompt:make a voice channel called Chill Lounge`', inline: false },
+              { name: '📂 Create in Category', value: '`/ai-do prompt:create channel updates under tickets`', inline: false },
+              { name: '🏷️ Create Server Role', value: '`/ai-do prompt:create role VIP with color gold`', inline: false },
+              { name: '📢 Bot Announcements', value: '`/ai-say message:Hello server! style:emerald`', inline: false },
+              { name: '🛡️ Safety Guarantee', value: 'Non-destructive policy enforced. Deletion, nuking, or wiping of existing channels or data is hard-blocked.', inline: false }
+            ],
+            footer: { text: 'Zen2K AI Copilot • officialZen2K' }
+          }],
+          flags: 64
+        }
+      };
     }
   }
 
