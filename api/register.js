@@ -432,11 +432,81 @@ async function runRegistration() {
     }
 
     const data = await res.json();
+
+    // 🎛️ Auto-deploy Master Voice Control Panel to channel 1549599836913803284
+    let voicePanelDeployed = false;
+    const VOICE_PANEL_CHANNEL_ID = process.env.VOICE_PANEL_CHANNEL_ID || '1549599836913803284';
+    try {
+      const msgsRes = await fetch(DISCORD_API + '/channels/' + VOICE_PANEL_CHANNEL_ID + '/messages?limit=10', {
+        headers: { 'Authorization': 'Bot ' + token }
+      });
+      const msgs = await msgsRes.json().catch(() => []);
+      const hasPanel = Array.isArray(msgs) && msgs.some(m => m.embeds && m.embeds.some(e => e.title && e.title.includes('Zen2K Voice Room Control Center')));
+      if (!hasPanel) {
+        const vPayload = {
+          embeds: [{
+            title: '🎛️ Zen2K Voice Room Control Center',
+            description: '>>> **Welcome to the Master Voice Channel Manager!**\n\nWhen you enter the **`🔊 Join to Create`** channel (<#1549599780257144923>), your private room is generated.\n\nUse the buttons below to lock your room, mute/unmute members, adjust slots, or delete your squad channel.',
+            color: 0x5865F2,
+            image: { url: 'https://media.giphy.com/media/26tn33aiTi1jkl6H6/giphy.gif' },
+            fields: [
+              {
+                name: '🔒 Privacy & Management',
+                value: '• **Lock / Unlock**: Toggle whether other members can join\n• **Mute / Unmute**: Silence any disruptive microphone in your room\n• **Kick / Disconnect**: Remove unwanted players from your room',
+                inline: false
+              },
+              {
+                name: '⚙️ Customization',
+                value: '• **Player Limit**: Set slots for 2s (2), 3s (3), 5s (5), or unlimited (0)\n• **Rename Room**: Personalize your squad channel name\n• **Delete**: Clean up and remove channel when finished',
+                inline: false
+              },
+              {
+                name: '🚪 Join Channel',
+                value: 'Click or join <#1549599780257144923> to enter your private room!',
+                inline: false
+              }
+            ],
+            footer: { text: 'Zen2K Voice Hub • Powered by officialZen2K' }
+          }],
+          components: [
+            {
+              type: 1,
+              components: [
+                { type: 2, style: 1, custom_id: 'btn_vcp_create', label: 'Create Room', emoji: { name: '➕' } },
+                { type: 2, style: 2, custom_id: 'btn_vcp_lock', label: 'Lock', emoji: { name: '🔒' } },
+                { type: 2, style: 2, custom_id: 'btn_vcp_unlock', label: 'Unlock', emoji: { name: '🔓' } },
+                { type: 2, style: 2, custom_id: 'btn_vcp_limit', label: 'Set Limit', emoji: { name: '👥' } },
+                { type: 2, style: 2, custom_id: 'btn_vcp_rename', label: 'Rename', emoji: { name: '✏️' } }
+              ]
+            },
+            {
+              type: 1,
+              components: [
+                { type: 2, style: 4, custom_id: 'btn_vcp_mute', label: 'Mute User', emoji: { name: '🔇' } },
+                { type: 2, style: 3, custom_id: 'btn_vcp_unmute', label: 'Unmute User', emoji: { name: '🔊' } },
+                { type: 2, style: 4, custom_id: 'btn_vcp_kick', label: 'Kick User', emoji: { name: '🚫' } },
+                { type: 2, style: 4, custom_id: 'btn_vcp_delete', label: 'Delete Room', emoji: { name: '🗑️' } }
+              ]
+            }
+          ]
+        };
+        const pRes = await fetch(DISCORD_API + '/channels/' + VOICE_PANEL_CHANNEL_ID + '/messages', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bot ' + token, 'Content-Type': 'application/json' },
+          body: JSON.stringify(vPayload)
+        });
+        voicePanelDeployed = pRes.ok;
+      } else {
+        voicePanelDeployed = true;
+      }
+    } catch (_) {}
+
     return {
       status: 200,
       data: {
         success: true,
         message: 'Successfully registered ' + data.length + ' slash commands globally and to ' + guildSyncResults.length + ' guild(s)!',
+        voice_panel_deployed: voicePanelDeployed,
         guilds: guildSyncResults,
         commands: data.map(c => '/' + c.name)
       }
