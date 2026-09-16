@@ -4,20 +4,84 @@ const DISCORD_API = 'https://discord.com/api/v10';
 
 async function discordFetch(endpoint, options = {}) {
   const token = process.env.DISCORD_TOKEN;
-  const res = await fetch(`${DISCORD_API}${endpoint}`, {
+  const res = await fetch(DISCORD_API + endpoint, {
     ...options,
     headers: {
-      'Authorization': `Bot ${token}`,
+      'Authorization': 'Bot ' + token,
       'Content-Type': 'application/json',
       ...(options.headers || {})
     }
   });
   if (!res.ok) {
     const errText = await res.text();
-    console.error(`Discord API Error [${endpoint}]:`, errText);
-    throw new Error(`Discord API error: ${res.status} ${errText}`);
+    console.error('Discord API Error [' + endpoint + ']:', errText);
+    throw new Error('Discord API error: ' + res.status + ' ' + errText);
   }
   return res.json().catch(() => ({}));
+}
+
+// AI Price Estimator Engine
+function calculateAiQuote(projectText, speed = 'standard', budget = '') {
+  const lower = projectText.toLowerCase();
+  let baseMin = 25;
+  let baseMax = 45;
+  const scopeItems = ['Full Custom Architecture & Configuration'];
+
+  if (lower.includes('bot') || lower.includes('discord')) {
+    baseMin += 10;
+    baseMax += 20;
+    scopeItems.push('Discord Gateway Integration & Slash Commands');
+  }
+  if (lower.includes('database') || lower.includes('sqlite') || lower.includes('mongo') || lower.includes('sql')) {
+    baseMin += 15;
+    baseMax += 25;
+    scopeItems.push('Persistent Database & Data Storage Engine');
+  }
+  if (lower.includes('web') || lower.includes('dashboard') || lower.includes('site') || lower.includes('frontend')) {
+    baseMin += 25;
+    baseMax += 45;
+    scopeItems.push('Web Dashboard & Real-Time Control UI');
+  }
+  if (lower.includes('payment') || lower.includes('paypal') || lower.includes('stripe') || lower.includes('crypto')) {
+    baseMin += 20;
+    baseMax += 35;
+    scopeItems.push('Automated Payment Verification & Webhook Handling');
+  }
+  if (lower.includes('fivem') || lower.includes('lua') || lower.includes('game') || lower.includes('roblox')) {
+    baseMin += 20;
+    baseMax += 40;
+    scopeItems.push('Custom Game Engine Scripting & Optimization');
+  }
+  if (lower.includes('api') || lower.includes('scrape') || lower.includes('ai') || lower.includes('openai')) {
+    baseMin += 20;
+    baseMax += 30;
+    scopeItems.push('Third-Party API & Automated Intelligence Pipeline');
+  }
+
+  let timeline = '3 - 5 Business Days';
+  if (speed === 'rush') {
+    baseMin = Math.round(baseMin * 1.35);
+    baseMax = Math.round(baseMax * 1.35);
+    timeline = '24 - 48 Hours (Rush Service)';
+  } else if (speed === 'flexible') {
+    baseMin = Math.round(baseMin * 0.9);
+    baseMax = Math.round(baseMax * 0.9);
+    timeline = '1 - 2 Weeks (Flexible)';
+  }
+
+  scopeItems.push('End-to-End Testing & Verification');
+  scopeItems.push('Direct Setup Assistance & 7-Day Warranty');
+
+  let priceString = '$' + baseMin + ' - $' + baseMax + ' USD';
+  if (budget) {
+    priceString += ' (Targeted around client budget: ' + budget + ')';
+  }
+
+  return {
+    price: priceString,
+    timeline,
+    scope: scopeItems
+  };
 }
 
 async function processInteraction(interaction) {
@@ -33,18 +97,19 @@ async function processInteraction(interaction) {
   if (type === InteractionType.APPLICATION_COMMAND) {
     const { name, options } = data;
 
+    // --- /setup-tickets ---
     if (name === 'setup-tickets') {
       return {
         type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
         data: {
           embeds: [{
             title: '🎫 Support & Ticket Station',
-            description: "Need assistance, have a billing question, or want to report a bug?\\nSelect a category from the menu below to open a private ticket with our staff.",
+            description: 'Need assistance, have a billing question, or want to order a service?\nSelect a category from the menu below to open a private ticket with our staff.',
             color: 0x5865F2,
             fields: [
               {
                 name: '⚡ Private & Secure',
-                value: 'A dedicated channel will be created exclusively for you and the support staff.'
+                value: 'A dedicated channel will be created exclusively for you and the business staff.'
               }
             ],
             footer: { text: 'Zen2K Ticket Engine • Made by officialZen2K' }
@@ -59,10 +124,10 @@ async function processInteraction(interaction) {
                   placeholder: '👉 Select a ticket category...',
                   options: [
                     { label: 'General Support', value: 'general', description: 'General questions and server assistance', emoji: { name: '❓' } },
-                    { label: 'Billing & Purchases', value: 'billing', description: 'Payment issues, upgrades, or store orders', emoji: { name: '💳' } },
+                    { label: 'Order a Service', value: 'order', description: 'Place a new business order or custom build', emoji: { name: '🛒' } },
+                    { label: 'Billing & Purchases', value: 'billing', description: 'Payment issues, upgrades, or invoice help', emoji: { name: '💳' } },
                     { label: 'Bug Reports', value: 'bug', description: 'Found a defect, glitch, or security concern', emoji: { name: '🐛' } },
-                    { label: 'Partnership & Inquiries', value: 'partner', description: 'Collaboration and business proposals', emoji: { name: '🤝' } },
-                    { label: 'Custom Request', value: 'custom', description: 'Direct assistance or specialized services', emoji: { name: '⚡' } }
+                    { label: 'Custom Commission', value: 'custom', description: 'Direct high-tier custom development', emoji: { name: '⚡' } }
                   ]
                 }
               ]
@@ -72,6 +137,97 @@ async function processInteraction(interaction) {
       };
     }
 
+    // --- /pricing-create (TicketTool style pricing panel) ---
+    if (name === 'pricing-create') {
+      const serviceName = options.find(o => o.name === 'service')?.value || 'Custom Service';
+      const price = options.find(o => o.name === 'price')?.value || 'Inquire';
+      const desc = options.find(o => o.name === 'description')?.value || 'High quality service delivered fast.';
+      const rawFeatures = options.find(o => o.name === 'features')?.value || 'Fast Delivery, 24/7 Support, Full Source Code';
+      const payment = options.find(o => o.name === 'payment')?.value || 'PayPal, CashApp, Crypto, Apple Pay';
+
+      const featureList = rawFeatures.split(',').map(f => '✅ ' + f.trim()).join('\n');
+
+      return {
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          embeds: [{
+            title: '📦 ' + serviceName + ' • Pricing & Ordering',
+            description: desc + '\n\n**💰 Price / Investment:** `' + price + '`',
+            color: 0x57F287,
+            fields: [
+              { name: '📋 What is Included', value: featureList || '✅ Full Delivery', inline: false },
+              { name: '💳 Accepted Payment Methods', value: payment, inline: false }
+            ],
+            footer: { text: 'Zen2K Business • Click below to open an order ticket' }
+          }],
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 2,
+                  style: 3, // Green
+                  label: 'Order ' + serviceName.slice(0, 50),
+                  custom_id: 'btn_order_pkg_' + serviceName.replace(/[^a-zA-Z0-9]/g, '_').slice(0, 30),
+                  emoji: { name: '🛒' }
+                },
+                {
+                  type: 2,
+                  style: 2, // Secondary
+                  label: 'Ask Questions',
+                  custom_id: 'btn_order_inquire',
+                  emoji: { name: '❓' }
+                }
+              ]
+            }
+          ]
+        }
+      };
+    }
+
+    // --- /ai-quote (Automated AI Pricing Breakdown) ---
+    if (name === 'ai-quote') {
+      const projectText = options.find(o => o.name === 'project')?.value || 'Custom Project';
+      const speed = options.find(o => o.name === 'speed')?.value || 'standard';
+      const budget = options.find(o => o.name === 'budget')?.value || '';
+
+      const quote = calculateAiQuote(projectText, speed, budget);
+      const scopeChecklist = quote.scope.map(s => '• ' + s).join('\n');
+
+      return {
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          embeds: [{
+            title: '🤖 AI Business Quote & Project Estimate',
+            description: 'Here is the automated scope breakdown and pricing analysis for your project request:',
+            color: 0x5865F2,
+            fields: [
+              { name: '📌 Project Request', value: '```\n' + projectText.slice(0, 300) + '\n```', inline: false },
+              { name: '💰 Estimated Price Bracket', value: '**' + quote.price + '**', inline: true },
+              { name: '⏱️ Estimated Turnaround', value: '**' + quote.timeline + '**', inline: true },
+              { name: '📦 Included Deliverables & Milestones', value: scopeChecklist, inline: false }
+            ],
+            footer: { text: 'Zen2K AI Pricing Engine • Click below to start this order' }
+          }],
+          components: [
+            {
+              type: 1,
+              components: [
+                {
+                  type: 2,
+                  style: 3,
+                  label: 'Accept Quote & Open Ticket',
+                  custom_id: 'btn_quote_accept',
+                  emoji: { name: '🤝' }
+                }
+              ]
+            }
+          ]
+        }
+      };
+    }
+
+    // --- /channel ---
     if (name === 'channel') {
       const sub = options?.[0];
       const subName = sub?.name;
@@ -82,25 +238,25 @@ async function processInteraction(interaction) {
         const isVoice = subOpts.find(o => o.name === 'type')?.value === 'voice';
 
         try {
-          const newCh = await discordFetch(`/guilds/${guild_id}/channels`, {
+          const newCh = await discordFetch('/guilds/' + guild_id + '/channels', {
             method: 'POST',
             body: JSON.stringify({ name: chName, type: isVoice ? 2 : 0 })
           });
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: `✅ Created ${isVoice ? 'voice' : 'text'} channel: <#${newCh.id}>` }
+            data: { content: '✅ Created ' + (isVoice ? 'voice' : 'text') + ' channel: <#' + newCh.id + '>' }
           };
         } catch (e) {
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: `❌ Failed to create channel: ${e.message}`, flags: 64 }
+            data: { content: '❌ Failed to create channel: ' + e.message, flags: 64 }
           };
         }
       }
 
       if (subName === 'delete') {
         try {
-          await discordFetch(`/channels/${channel_id}`, { method: 'DELETE' });
+          await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
             data: { content: '🗑️ Channel deleted successfully.' }
@@ -108,7 +264,7 @@ async function processInteraction(interaction) {
         } catch (e) {
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: `❌ Failed to delete channel: ${e.message}`, flags: 64 }
+            data: { content: '❌ Failed to delete channel: ' + e.message, flags: 64 }
           };
         }
       }
@@ -116,55 +272,55 @@ async function processInteraction(interaction) {
       if (subName === 'purge') {
         const amount = subOpts.find(o => o.name === 'amount')?.value || 10;
         try {
-          const msgs = await discordFetch(`/channels/${channel_id}/messages?limit=${Math.min(amount, 100)}`);
+          const msgs = await discordFetch('/channels/' + channel_id + '/messages?limit=' + Math.min(amount, 100));
           if (Array.isArray(msgs) && msgs.length > 0) {
             const ids = msgs.map(m => m.id);
-            await discordFetch(`/channels/${channel_id}/messages/bulk-delete`, {
+            await discordFetch('/channels/' + channel_id + '/messages/bulk-delete', {
               method: 'POST',
               body: JSON.stringify({ messages: ids })
             });
           }
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: `🧹 Cleared ${amount} messages.`, flags: 64 }
+            data: { content: '🧹 Cleared ' + amount + ' messages.', flags: 64 }
           };
         } catch (e) {
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: `❌ Purge error: ${e.message}`, flags: 64 }
+            data: { content: '❌ Purge error: ' + e.message, flags: 64 }
           };
         }
       }
 
       if (subName === 'lock') {
         try {
-          await discordFetch(`/channels/${channel_id}/permissions/${guild_id}`, {
+          await discordFetch('/channels/' + channel_id + '/permissions/' + guild_id, {
             method: 'PUT',
             body: JSON.stringify({ type: 0, deny: '2048' })
           });
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: `🔒 Channel <#${channel_id}> is now locked.` }
+            data: { content: '🔒 Channel <#' + channel_id + '> is now locked.' }
           };
         } catch (e) {
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: `❌ Error locking channel: ${e.message}`, flags: 64 }
+            data: { content: '❌ Error locking channel: ' + e.message, flags: 64 }
           };
         }
       }
 
       if (subName === 'unlock') {
         try {
-          await discordFetch(`/channels/${channel_id}/permissions/${guild_id}`, { method: 'DELETE' });
+          await discordFetch('/channels/' + channel_id + '/permissions/' + guild_id, { method: 'DELETE' });
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: `🔓 Channel <#${channel_id}> is now unlocked.` }
+            data: { content: '🔓 Channel <#' + channel_id + '> is now unlocked.' }
           };
         } catch (e) {
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: `❌ Error unlocking channel: ${e.message}`, flags: 64 }
+            data: { content: '❌ Error unlocking channel: ' + e.message, flags: 64 }
           };
         }
       }
@@ -180,8 +336,8 @@ async function processInteraction(interaction) {
       return {
         type: InteractionResponseType.MODAL,
         data: {
-          custom_id: `modal_open_ticket_${selectedCat}`,
-          title: 'Open Support Ticket',
+          custom_id: 'modal_open_ticket_' + selectedCat,
+          title: 'Open Support / Order Ticket',
           components: [
             {
               type: 1,
@@ -189,9 +345,9 @@ async function processInteraction(interaction) {
                 {
                   type: 4,
                   custom_id: 'ticket_topic',
-                  label: 'Topic / Brief Summary',
+                  label: 'Subject / Service Required',
                   style: 1,
-                  placeholder: 'e.g. Need help with billing or server rank',
+                  placeholder: 'e.g. Discord Bot, FiveM Script, Custom Build',
                   required: true,
                   max_length: 100
                 }
@@ -203,9 +359,9 @@ async function processInteraction(interaction) {
                 {
                   type: 4,
                   custom_id: 'ticket_details',
-                  label: 'Detailed Description',
+                  label: 'Project Details & Specifications',
                   style: 2,
-                  placeholder: 'Describe your question or issue in detail...',
+                  placeholder: 'Describe what you need, any deadlines, and your budget...',
                   required: true,
                   max_length: 1000
                 }
@@ -217,7 +373,7 @@ async function processInteraction(interaction) {
                 {
                   type: 4,
                   custom_id: 'ticket_priority',
-                  label: 'Priority (Low / Normal / High / Urgent)',
+                  label: 'Delivery Priority (Normal / Rush / Urgent)',
                   style: 1,
                   value: 'Normal',
                   required: false,
@@ -230,16 +386,107 @@ async function processInteraction(interaction) {
       };
     }
 
+    if (custom_id.startsWith('btn_order_pkg_') || custom_id === 'btn_order_inquire' || custom_id === 'btn_quote_accept') {
+      const isQuote = custom_id === 'btn_quote_accept';
+      const isQuestion = custom_id === 'btn_order_inquire';
+      let serviceLabel = 'Order';
+      if (custom_id.startsWith('btn_order_pkg_')) {
+        serviceLabel = custom_id.replace('btn_order_pkg_', '').replace(/_/g, ' ');
+      } else if (isQuote) {
+        serviceLabel = 'AI Quote';
+      } else if (isQuestion) {
+        serviceLabel = 'Inquiry';
+      }
+
+      const ticketRandom = Math.floor(1000 + Math.random() * 9000);
+      const chName = 'order-' + ticketRandom + '-' + user.username.slice(0, 10).toLowerCase();
+
+      try {
+        const overwrites = [
+          { id: guild_id, type: 0, deny: '1024' },
+          { id: user.id, type: 1, allow: '68608' }
+        ];
+
+        const staffRoleId = process.env.STAFF_ROLE_ID;
+        if (staffRoleId) {
+          overwrites.push({ id: staffRoleId, type: 0, allow: '68608' });
+        }
+
+        const newChannel = await discordFetch('/guilds/' + guild_id + '/channels', {
+          method: 'POST',
+          body: JSON.stringify({
+            name: chName,
+            type: 0,
+            permission_overwrites: overwrites,
+            topic: 'Order Ticket #' + ticketRandom + ' | Client: ' + user.username + ' (' + user.id + ') | Package: ' + serviceLabel
+          })
+        });
+
+        const staffPing = staffRoleId ? (' | <@&' + staffRoleId + '>') : '';
+        await discordFetch('/channels/' + newChannel.id + '/messages', {
+          method: 'POST',
+          body: JSON.stringify({
+            content: '<@' + user.id + '>' + staffPing,
+            embeds: [{
+              title: '🛒 Order Ticket #' + ticketRandom + ' • ' + serviceLabel.toUpperCase(),
+              description: 'Welcome <@' + user.id + '>! You opened an order ticket for **' + serviceLabel + '**.\nOur business staff has been alerted and will finalize your details and invoice shortly.',
+              color: 0x57F287,
+              fields: [
+                { name: '👤 Client', value: '<@' + user.id + '> (`' + user.username + '`)', inline: true },
+                { name: '📦 Selected Service', value: serviceLabel, inline: true },
+                { name: '💳 Order Status', value: '⏳ **Pending Payment / Specifications**', inline: false }
+              ],
+              footer: { text: 'Zen2K Business Ticket System • Made by officialZen2K' }
+            }],
+            components: [
+              {
+                type: 1,
+                components: [
+                  { type: 2, style: 4, label: 'Close Ticket', custom_id: 'btn_close_ticket', emoji: { name: '🔒' } },
+                  { type: 2, style: 3, label: 'Claim Order', custom_id: 'btn_claim_ticket', emoji: { name: '👤' } },
+                  { type: 2, style: 1, label: 'Mark as Paid', custom_id: 'btn_mark_paid', emoji: { name: '💳' } },
+                  { type: 2, style: 2, label: 'Transcript', custom_id: 'btn_transcript_ticket', emoji: { name: '📑' } }
+                ]
+              }
+            ]
+          })
+        });
+
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '✅ Your order ticket has been created: <#' + newChannel.id + '>', flags: 64 }
+        };
+      } catch (err) {
+        return {
+          type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+          data: { content: '❌ Failed to open order ticket: ' + err.message, flags: 64 }
+        };
+      }
+    }
+
+    if (custom_id === 'btn_mark_paid') {
+      return {
+        type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
+        data: {
+          embeds: [{
+            title: '💳 Payment Confirmed',
+            description: 'This order has been marked as **PAID** by <@' + user.id + '>. Work is now officially in progress!',
+            color: 0x23A55A
+          }]
+        }
+      };
+    }
+
     if (custom_id === 'btn_close_ticket') {
       try {
-        await discordFetch(`/channels/${channel_id}/messages`, {
+        await discordFetch('/channels/' + channel_id + '/messages', {
           method: 'POST',
           body: JSON.stringify({ content: '🔒 **Ticket closing. Channel will be deleted in 4 seconds...**' })
         });
 
         setTimeout(async () => {
           try {
-            await discordFetch(`/channels/${channel_id}`, { method: 'DELETE' });
+            await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
           } catch (err) {
             console.error('Delete channel error:', err);
           }
@@ -247,12 +494,12 @@ async function processInteraction(interaction) {
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: `🔒 Closing confirmed by <@${user.id}>.` }
+          data: { content: '🔒 Closing confirmed by <@' + user.id + '>.' }
         };
       } catch (e) {
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: `❌ Error closing channel: ${e.message}`, flags: 64 }
+          data: { content: '❌ Error closing channel: ' + e.message, flags: 64 }
         };
       }
     }
@@ -263,7 +510,7 @@ async function processInteraction(interaction) {
         data: {
           embeds: [{
             title: '👤 Ticket Claimed',
-            description: `This ticket has been claimed by <@${user.id}>. They will be handling your request from here.`,
+            description: 'This ticket has been claimed by <@' + user.id + '>. They will be handling your request from here.',
             color: 0x23A55A
           }]
         }
@@ -272,24 +519,21 @@ async function processInteraction(interaction) {
 
     if (custom_id === 'btn_transcript_ticket') {
       try {
-        const msgs = await discordFetch(`/channels/${channel_id}/messages?limit=100`);
+        const msgs = await discordFetch('/channels/' + channel_id + '/messages?limit=100');
         const messageList = Array.isArray(msgs) ? msgs.reverse() : [];
-        const lines = messageList.map(m => `[${new Date(m.timestamp).toISOString()}] ${m.author.username}: ${m.content}`);
+        const lines = messageList.map(m => '[' + new Date(m.timestamp).toISOString() + '] ' + m.author.username + ': ' + m.content);
         const transcriptText = lines.join('\n');
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: {
-            content: `📑 **Ticket Transcript Export (${messageList.length} messages):**
-\`\`\`text
-${transcriptText.slice(-1800)}
-\`\`\``
+            content: '📑 **Ticket Transcript Export (' + messageList.length + ' messages):**\n```text\n' + transcriptText.slice(-1800) + '\n```'
           }
         };
       } catch (e) {
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: `❌ Failed to fetch transcript: ${e.message}`, flags: 64 }
+          data: { content: '❌ Failed to fetch transcript: ' + e.message, flags: 64 }
         };
       }
     }
@@ -306,7 +550,7 @@ ${transcriptText.slice(-1800)}
       const priority = data.components[2]?.components[0]?.value || 'Normal';
 
       const ticketRandom = Math.floor(1000 + Math.random() * 9000);
-      const chName = `ticket-${ticketRandom}-${category}`;
+      const chName = 'ticket-' + ticketRandom + '-' + category;
 
       try {
         const overwrites = [
@@ -319,30 +563,30 @@ ${transcriptText.slice(-1800)}
           overwrites.push({ id: staffRoleId, type: 0, allow: '68608' });
         }
 
-        const newChannel = await discordFetch(`/guilds/${guild_id}/channels`, {
+        const newChannel = await discordFetch('/guilds/' + guild_id + '/channels', {
           method: 'POST',
           body: JSON.stringify({
             name: chName,
             type: 0,
             permission_overwrites: overwrites,
-            topic: `Ticket #${ticketRandom} | Opened by ${user.username} (${user.id}) | Category: ${category}`
+            topic: 'Ticket #' + ticketRandom + ' | Opened by ' + user.username + ' (' + user.id + ') | Category: ' + category
           })
         });
 
-        const staffPing = staffRoleId ? ` | <@&${staffRoleId}>` : '';
-        await discordFetch(`/channels/${newChannel.id}/messages`, {
+        const staffPing = staffRoleId ? (' | <@&' + staffRoleId + '>') : '';
+        await discordFetch('/channels/' + newChannel.id + '/messages', {
           method: 'POST',
           body: JSON.stringify({
-            content: `<@${user.id}>${staffPing}`,
+            content: '<@' + user.id + '>' + staffPing,
             embeds: [{
-              title: `🎫 Ticket #${ticketRandom} • ${category.toUpperCase()}`,
-              description: `Welcome <@${user.id}>! Staff has been alerted and will assist you shortly.`,
+              title: '🎫 Ticket #' + ticketRandom + ' • ' + category.toUpperCase(),
+              description: 'Welcome <@' + user.id + '>! Staff has been alerted and will assist you shortly.',
               color: 0x5865F2,
               fields: [
                 { name: '📌 Topic', value: topic, inline: false },
                 { name: '📝 Details', value: details, inline: false },
                 { name: '⚡ Priority', value: priority, inline: true },
-                { name: '👤 Creator', value: `<@${user.id}>`, inline: true }
+                { name: '👤 Creator', value: '<@' + user.id + '>', inline: true }
               ],
               footer: { text: 'Zen2K Ticket Suite • Made by officialZen2K' }
             }],
@@ -361,13 +605,13 @@ ${transcriptText.slice(-1800)}
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: `✅ Your ticket has been created: <#${newChannel.id}>`, flags: 64 }
+          data: { content: '✅ Your ticket has been created: <#' + newChannel.id + '>', flags: 64 }
         };
       } catch (err) {
         console.error('Failed to create ticket channel:', err);
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: `❌ Failed to create ticket channel: ${err.message}`, flags: 64 }
+          data: { content: '❌ Failed to create ticket channel: ' + err.message, flags: 64 }
         };
       }
     }
