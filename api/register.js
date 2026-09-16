@@ -46,6 +46,21 @@ async function runRegistration() {
       type: 1
     },
     {
+      name: 'setup-verify',
+      description: 'Deploy the Zen2K Member Verification Station in this channel',
+      type: 1,
+      options: [
+        { name: 'channel', description: 'Channel to deploy verification panel to (default: current channel)', type: 7, required: false },
+        { name: 'role', description: 'Role to grant upon verification (default: 1529699129176100914)', type: 8, required: false },
+        { name: 'banner_url', description: 'Custom banner image or animated GIF URL', type: 3, required: false }
+      ]
+    },
+    {
+      name: 'verify',
+      description: 'Verify your account to unlock server channels and ticket station',
+      type: 1
+    },
+    {
       name: 'pricing-create',
       description: 'Create an animated pricing embed with Tier Dropdowns and Order Ticket buttons',
       type: 1,
