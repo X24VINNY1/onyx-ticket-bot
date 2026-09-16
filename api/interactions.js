@@ -1,6 +1,8 @@
 import { InteractionType, InteractionResponseType, verifyKey } from 'discord-interactions';
 
 const DISCORD_API = 'https://discord.com/api/v10';
+const TICKETS_CATEGORY_ID = process.env.TICKETS_CATEGORY_ID || '1529702797082365962';
+const TRANSCRIPTS_CHANNEL_ID = process.env.TRANSCRIPTS_CHANNEL_ID || '1529702818796015718';
 
 async function discordFetch(endpoint, options = {}) {
   const token = process.env.DISCORD_TOKEN;
@@ -18,6 +20,57 @@ async function discordFetch(endpoint, options = {}) {
     throw new Error('Discord API error: ' + res.status + ' ' + errText);
   }
   return res.json().catch(() => ({}));
+}
+
+// Archive ticket transcript to the designated transcripts channel
+async function archiveTicketTranscript(channelId, closedByUserId, closedByUsername) {
+  try {
+    const ch = await discordFetch('/channels/' + channelId).catch(() => ({}));
+    const chName = ch.name || 'ticket-' + channelId;
+    const topic = ch.topic || 'Zen2K Service Order';
+
+    const msgs = await discordFetch('/channels/' + channelId + '/messages?limit=100').catch(() => []);
+    const messageList = Array.isArray(msgs) ? msgs.reverse() : [];
+
+    const lines = messageList.map(m => {
+      const time = new Date(m.timestamp).toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      const author = m.author ? (m.author.username || m.author.id) : 'Unknown';
+      const content = m.content || (m.embeds?.length ? '[Embed: ' + (m.embeds[0].title || 'card') + ']' : '[Attachment/Component]');
+      return `[${time}] ${author}: ${content}`;
+    });
+    const logText = lines.join('\n');
+
+    const clientMatch = topic.match(/\((\d{17,20})\)/) || topic.match(/Client:\s*(\S+)/);
+    const clientInfo = clientMatch ? clientMatch[1] : 'Unknown Client';
+
+    const transcriptsChId = TRANSCRIPTS_CHANNEL_ID;
+    await discordFetch('/channels/' + transcriptsChId + '/messages', {
+      method: 'POST',
+      body: JSON.stringify({
+        embeds: [{
+          title: '📑 TICKET ARCHIVED • #' + chName,
+          description: '>>> 👤 **Client:** ' + (clientInfo.startsWith('<@') ? clientInfo : (isNaN(clientInfo) ? clientInfo : '<@' + clientInfo + '>')) + '\n' +
+            '🔒 **Closed By:** <@' + closedByUserId + '> (`' + closedByUsername + '`)\n' +
+            '📌 **Channel Topic:** `' + topic.slice(0, 100) + '`\n' +
+            '💬 **Total Messages:** `' + messageList.length + '`\n' +
+            '🕒 **Archived At:** <t:' + Math.floor(Date.now() / 1000) + ':F>',
+          color: 0x5865F2,
+          fields: [
+            {
+              name: '📜 Transcript Log',
+              value: '```text\n' + (logText.slice(-950) || 'No conversation logged.') + '\n```',
+              inline: false
+            }
+          ],
+          footer: { text: 'Zen2K Automated Vault • officialZen2K' }
+        }]
+      })
+    });
+    return true;
+  } catch (err) {
+    console.error('Failed to archive ticket transcript:', err);
+    return false;
+  }
 }
 
 // AI Price Estimator Engine
@@ -85,14 +138,12 @@ function parseTiers(tiersRaw, priceRaw, serviceName = '') {
   const result = [];
   const raw = (tiersRaw && tiersRaw.trim()) ? tiersRaw : (priceRaw || '');
 
-  // Split by comma or semicolon
   let segments = [];
   if (raw.includes(',')) {
     segments = raw.split(',');
   } else if (raw.includes(';')) {
     segments = raw.split(';');
   } else {
-    // Check if space-separated entries like '60$ for 450k 120$ for 900k 150$ for 1.4m'
     const chunkRegex = /(\$?\d+(?:\.\d+)?[kKmM]?\$?)\s*(?:for|-|:|–)?\s*(\$?\d+(?:\.\d+)?[kKmM]?\$?)/gi;
     const matches = [...raw.matchAll(chunkRegex)];
     if (matches.length >= 2) {
@@ -108,9 +159,7 @@ function parseTiers(tiersRaw, priceRaw, serviceName = '') {
     const s = seg.trim();
     if (!s) continue;
 
-    // Detect price: e.g. "$60", "60$", "$120.00"
     const priceMatch = s.match(/(?:\$\s*\d+(?:\.\d+)?|\d+(?:\.\d+)?\s*\$)/);
-    // Detect amount/tier: e.g. "450k", "900k", "1.4M", "450,000"
     const amountMatch = s.match(/(\d+(?:\.\d+)?\s*[kKmM](?:\s*VC)?|\d{1,3}(?:,\d{3})+\s*(?:VC)?)/i);
 
     if (priceMatch && amountMatch) {
@@ -147,7 +196,6 @@ function buildTierButtons(tiers, serviceName) {
   const rows = [];
   const emojis = ['🪙', '⚡', '💎', '👑', '🔥'];
 
-  // If 1 to 5 tiers: Put them in Row 1!
   if (tiers.length <= 5) {
     const tierComponents = tiers.map((t, idx) => {
       const sanitizedName = t.name.replace(/[^a-zA-Z0-9]/g, '').slice(0, 15);
@@ -155,7 +203,7 @@ function buildTierButtons(tiers, serviceName) {
       const labelText = (t.name + (t.price ? ' • ' + t.price : '')).slice(0, 80);
       return {
         type: 2,
-        style: idx === 1 ? 3 : 1, // Highlight 2nd tier with green (most popular)
+        style: idx === 1 ? 3 : 1,
         label: labelText,
         custom_id: 'btn_tier_' + idx + '_' + sanitizedName + '_' + sanitizedPrice,
         emoji: { name: emojis[idx % emojis.length] }
@@ -163,7 +211,6 @@ function buildTierButtons(tiers, serviceName) {
     });
     rows.push({ type: 1, components: tierComponents });
   } else {
-    // 6 to 10 tiers: split across 2 rows of up to 5
     const row1 = tiers.slice(0, 5).map((t, idx) => ({
       type: 2,
       style: 1,
@@ -182,7 +229,6 @@ function buildTierButtons(tiers, serviceName) {
     rows.push({ type: 1, components: row2 });
   }
 
-  // Row 2: Action & Trust Buttons (Perfect 3-button symmetrical row)
   rows.push({
     type: 1,
     components: [
@@ -348,14 +394,12 @@ async function processInteraction(interaction) {
       const parsedTiers = parseTiers(tiersRaw, price, serviceName);
       const featureList = rawFeatures.split(',').map(f => '✅ ' + f.trim()).join('\n');
 
-      // Beautiful markdown tier list that never cuts off on phones
       const tierBullets = parsedTiers.map((t, idx) => {
         const badge = idx === 0 ? '🪙' : (idx === 1 ? '⚡' : (idx === 2 ? '💎' : '🔥'));
         const tag = idx === 1 ? ' *(🔥 Most Popular)*' : (idx === 2 ? ' *(👑 Best Value)*' : '');
         return badge + ' **' + t.name + '** ➔ `' + (t.price || 'Inquire') + '`' + tag;
       }).join('\n');
 
-      // Clean ASCII table for desktop
       let tiersTable = '';
       if (parsedTiers.length > 0) {
         tiersTable = '```\n' +
@@ -370,7 +414,6 @@ async function processInteraction(interaction) {
         tiersTable += '└──────────────────────────────┴─────────────┘\n```';
       }
 
-      // Build clean 1-click tier buttons (NO OVERLAPPING POPUP DROPDOWN!)
       const buttonRows = buildTierButtons(parsedTiers, serviceName);
 
       return {
@@ -466,10 +509,13 @@ async function processInteraction(interaction) {
 
       if (subName === 'delete') {
         try {
+          // If this is a ticket/order channel, auto-archive to transcripts vault
+          archiveTicketTranscript(channel_id, user.id, user.username).catch(() => {});
+
           await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
           return {
             type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-            data: { content: '🗑️ Channel deleted successfully.' }
+            data: { content: '🗑️ Channel deleted successfully. Transcript saved to <#' + TRANSCRIPTS_CHANNEL_ID + '>.' }
           };
         } catch (e) {
           return {
@@ -626,7 +672,6 @@ async function processInteraction(interaction) {
       let tierLabel = '';
 
       if (custom_id.startsWith('btn_tier_')) {
-        // e.g. btn_tier_0_450KVC_$60
         const parts = custom_id.replace('btn_tier_', '').split('_');
         const tIdx = parts[0];
         const tName = parts[1] || ('Tier #' + tIdx);
@@ -660,14 +705,21 @@ async function processInteraction(interaction) {
           overwrites.push({ id: staffRoleId, type: 0, allow: '68608' });
         }
 
+        // CREATE CHANNEL UNDER OPEN TICKETS CATEGORY (1529702797082365962)
+        const channelPayload = {
+          name: chName,
+          type: 0,
+          permission_overwrites: overwrites,
+          topic: 'Zen2K Ticket #' + ticketRandom + ' | Client: ' + user.username + ' (' + user.id + ') | Service: ' + serviceLabel + (tierLabel ? ' [' + tierLabel + ']' : '')
+        };
+
+        if (TICKETS_CATEGORY_ID) {
+          channelPayload.parent_id = TICKETS_CATEGORY_ID;
+        }
+
         const newChannel = await discordFetch('/guilds/' + guild_id + '/channels', {
           method: 'POST',
-          body: JSON.stringify({
-            name: chName,
-            type: 0,
-            permission_overwrites: overwrites,
-            topic: 'Zen2K Ticket #' + ticketRandom + ' | Client: ' + user.username + ' (' + user.id + ') | Service: ' + serviceLabel + (tierLabel ? ' [' + tierLabel + ']' : '')
-          })
+          body: JSON.stringify(channelPayload)
         });
 
         const staffPing = staffRoleId ? (' | <@&' + staffRoleId + '>') : '';
@@ -685,7 +737,7 @@ async function processInteraction(interaction) {
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '✅ Your order channel has been initialized: <#' + newChannel.id + '>', flags: 64 }
+          data: { content: '✅ Your ticket has been created in <#' + TICKETS_CATEGORY_ID + '>: <#' + newChannel.id + '>', flags: 64 }
         };
       } catch (err) {
         return {
@@ -701,7 +753,6 @@ async function processInteraction(interaction) {
       const originalEmbed = message?.embeds?.[0] || {};
       const desc = originalEmbed.description || '';
       
-      // Extract service name and client from embed
       const sMatch = desc.match(/Service:\s*`([^`]+)`/);
       const serviceName = sMatch ? sMatch[1] : 'Order';
       const tMatch = desc.match(/Package:\s*`([^`]+)`/);
@@ -715,7 +766,6 @@ async function processInteraction(interaction) {
       const updatedEmbed = buildProgressEmbed(ticketNum, user.username, clientId, serviceName, tierName, targetStep, user.id);
       const updatedButtons = buildProgressButtons(targetStep);
 
-      // Send announcement in channel
       let notifyText = '';
       if (targetStep === 2) {
         notifyText = '💳 **Payment Confirmed!** Verified by <@' + user.id + '>. Order is now in the fulfillment queue!';
@@ -741,20 +791,25 @@ async function processInteraction(interaction) {
       };
     }
 
-    // Close Ticket
+    // Close Ticket -> Archive to TRANSCRIPTS_CHANNEL_ID and delete channel
     if (custom_id === 'btn_close_ticket') {
       try {
+        // Post closing warning in the ticket channel
         await discordFetch('/channels/' + channel_id + '/messages', {
           method: 'POST',
           body: JSON.stringify({
             embeds: [{
               title: '🔒 Ticket Closed',
-              description: 'Ticket closed by <@' + user.id + '>. Saving transcript and deleting channel in 5 seconds...',
+              description: 'Ticket closed by <@' + user.id + '>.\nArchiving transcript to <#' + TRANSCRIPTS_CHANNEL_ID + '> and deleting channel in 5 seconds...',
               color: 0xED4245
             }]
           })
         });
 
+        // Trigger asynchronous archival to the transcripts vault
+        archiveTicketTranscript(channel_id, user.id, user.username).catch(e => console.error('Archive error:', e));
+
+        // Delete channel after 5s countdown
         setTimeout(async () => {
           try {
             await discordFetch('/channels/' + channel_id, { method: 'DELETE' });
@@ -765,7 +820,7 @@ async function processInteraction(interaction) {
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '🔒 Close confirmed by <@' + user.id + '>.' }
+          data: { content: '🔒 Close confirmed. Transcript will be sent to <#' + TRANSCRIPTS_CHANNEL_ID + '>.' }
         };
       } catch (e) {
         return {
@@ -789,24 +844,21 @@ async function processInteraction(interaction) {
       };
     }
 
-    // Save Transcript
+    // Save Transcript manually to transcripts channel
     if (custom_id === 'btn_transcript_ticket') {
       try {
-        const msgs = await discordFetch('/channels/' + channel_id + '/messages?limit=100');
-        const messageList = Array.isArray(msgs) ? msgs.reverse() : [];
-        const lines = messageList.map(m => '[' + new Date(m.timestamp).toISOString() + '] ' + m.author.username + ': ' + m.content);
-        const transcriptText = lines.join('\n');
-
+        await archiveTicketTranscript(channel_id, user.id, user.username);
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
           data: {
-            content: '📑 **Ticket Transcript Export (' + messageList.length + ' messages):**\n```text\n' + transcriptText.slice(-1800) + '\n```'
+            content: '📑 **Transcript Saved!** Successfully exported to <#' + TRANSCRIPTS_CHANNEL_ID + '>.',
+            flags: 64
           }
         };
       } catch (e) {
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '❌ Failed to fetch transcript: ' + e.message, flags: 64 }
+          data: { content: '❌ Failed to export transcript: ' + e.message, flags: 64 }
         };
       }
     }
@@ -823,7 +875,7 @@ async function processInteraction(interaction) {
       const priority = data.components[2]?.components[0]?.value || 'Normal';
 
       const ticketRandom = Math.floor(1000 + Math.random() * 9000);
-      const chName = 'ticket-' + ticketRandom + '-' + category.slice(0, 10);
+      const chName = 'ticket-' + category.slice(0, 8) + '-' + ticketRandom;
 
       try {
         const overwrites = [
@@ -836,14 +888,20 @@ async function processInteraction(interaction) {
           overwrites.push({ id: staffRoleId, type: 0, allow: '68608' });
         }
 
+        const channelPayload = {
+          name: chName,
+          type: 0,
+          permission_overwrites: overwrites,
+          topic: 'Ticket #' + ticketRandom + ' | Opened by ' + user.username + ' (' + user.id + ') | Category: ' + category
+        };
+
+        if (TICKETS_CATEGORY_ID) {
+          channelPayload.parent_id = TICKETS_CATEGORY_ID;
+        }
+
         const newChannel = await discordFetch('/guilds/' + guild_id + '/channels', {
           method: 'POST',
-          body: JSON.stringify({
-            name: chName,
-            type: 0,
-            permission_overwrites: overwrites,
-            topic: 'Ticket #' + ticketRandom + ' | Opened by ' + user.username + ' (' + user.id + ') | Category: ' + category
-          })
+          body: JSON.stringify(channelPayload)
         });
 
         const staffPing = staffRoleId ? (' | <@&' + staffRoleId + '>') : '';
@@ -861,7 +919,7 @@ async function processInteraction(interaction) {
 
         return {
           type: InteractionResponseType.CHANNEL_MESSAGE_WITH_SOURCE,
-          data: { content: '✅ Your ticket has been created: <#' + newChannel.id + '>', flags: 64 }
+          data: { content: '✅ Your ticket has been created in <#' + TICKETS_CATEGORY_ID + '>: <#' + newChannel.id + '>', flags: 64 }
         };
       } catch (err) {
         return {
