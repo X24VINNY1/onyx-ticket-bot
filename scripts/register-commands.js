@@ -1,4 +1,4 @@
-const DISCORD_API = 'https://discord.com/api/v10';
+﻿const DISCORD_API = 'https://discord.com/api/v10';
 
 const token = process.env.DISCORD_TOKEN;
 const appId = process.env.DISCORD_APP_ID;
@@ -12,8 +12,40 @@ if (!token || !appId) {
 const commands = [
   {
     name: 'setup-tickets',
-    description: 'Deploy the interactive ticket creation panel in this channel',
+    description: 'Deploy the interactive ticket station panel in this channel',
     type: 1
+  },
+  {
+    name: 'pricing-create',
+    description: 'Create a business pricing embed with an attached Order Ticket button (tickettool style)',
+    type: 1,
+    options: [
+      { name: 'service', description: 'Product or Service Title (e.g. Discord Bot, FiveM Script)', type: 3, required: true },
+      { name: 'price', description: 'Price tag (e.g. $25.00 or Starting at $15)', type: 3, required: true },
+      { name: 'description', description: 'Overview description of what is included', type: 3, required: true },
+      { name: 'features', description: 'Comma-separated features list (e.g. Fast Delivery, 24/7 Hosting, Admin Panel)', type: 3, required: false },
+      { name: 'payment', description: 'Payment methods accepted (e.g. CashApp, PayPal, Crypto)', type: 3, required: false }
+    ]
+  },
+  {
+    name: 'ai-quote',
+    description: 'AI-powered project price estimator that builds a formal quote embed with an Order button',
+    type: 1,
+    options: [
+      { name: 'project', description: 'Describe what the client or project needs', type: 3, required: true },
+      {
+        name: 'speed',
+        description: 'Delivery turnaround speed',
+        type: 3,
+        required: false,
+        choices: [
+          { name: 'Standard (3-5 days)', value: 'standard' },
+          { name: 'Rush (24-48 hours)', value: 'rush' },
+          { name: 'Flexible (1-2 weeks)', value: 'flexible' }
+        ]
+      },
+      { name: 'budget', description: 'Client target budget (e.g. $40)', type: 3, required: false }
+    ]
   },
   {
     name: 'channel',
@@ -89,7 +121,7 @@ async function register() {
   }
 
   const data = await res.json();
-  console.log('[+] Successfully registered ' + data.length + ' slash commands!');
+  console.log('[+] Successfully registered ' + data.length + ' slash commands: ' + data.map(c => '/' + c.name).join(', '));
 }
 
 register();
