@@ -391,6 +391,67 @@ async function runRegistration() {
           type: 1
         }
       ]
+    },
+    {
+      name: 'automod',
+      description: 'Zen2K Anti-Raid, Anti-Invite & Phishing Security Shield',
+      type: 1,
+      options: [
+        {
+          name: 'setup',
+          description: 'Deploy 4-layer Auto-Mod shields (Anti-Invite, Anti-Phishing, Anti-Spam, Mention Shield)',
+          type: 1,
+          options: [
+            { name: 'log_channel', description: 'Channel to receive security alert cards (optional)', type: 7, required: false },
+            { name: 'timeout_minutes', description: 'Timeout duration in minutes for offenders (default: 60)', type: 4, required: false }
+          ]
+        },
+        {
+          name: 'status',
+          description: 'View active security shields, rule status, and protected channels',
+          type: 1
+        },
+        {
+          name: 'disable',
+          description: 'Temporarily disable a specific security shield or all shields',
+          type: 1,
+          options: [
+            {
+              name: 'shield',
+              description: 'The security shield to disable',
+              type: 3,
+              required: true,
+              choices: [
+                { name: 'All Shields', value: 'all' },
+                { name: 'Anti-Invite Shield', value: 'invite' },
+                { name: 'Anti-Phishing & Scam Shield', value: 'scam' },
+                { name: 'Anti-Mass Mention Shield', value: 'mentions' },
+                { name: 'Anti-Spam Shield', value: 'spam' }
+              ]
+            }
+          ]
+        },
+        {
+          name: 'enable',
+          description: 'Enable or restore a specific security shield',
+          type: 1,
+          options: [
+            {
+              name: 'shield',
+              description: 'The security shield to re-enable',
+              type: 3,
+              required: true,
+              choices: [
+                { name: 'All Shields', value: 'all' },
+                { name: 'Anti-Invite Shield', value: 'invite' },
+                { name: 'Anti-Phishing & Scam Shield', value: 'scam' },
+                { name: 'Anti-Mass Mention Shield', value: 'mentions' },
+                { name: 'Anti-Spam Shield', value: 'spam' }
+              ]
+            }
+          ]
+        }
+      ]
     }
   ];
 
